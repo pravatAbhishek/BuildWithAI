@@ -12,7 +12,7 @@ import {
 export function FixedDeposit() {
   const { player, fixedDeposits, createFixedDeposit, withdrawFixedDeposit } =
     useGameStore();
-  const [amount, setAmount] = useState(GAME_CONFIG.FD_MINIMUM_AMOUNT);
+  const [amount, setAmount] = useState<number>(GAME_CONFIG.FD_MINIMUM_AMOUNT);
   const [showCreate, setShowCreate] = useState(false);
 
   const canCreate =

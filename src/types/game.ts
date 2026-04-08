@@ -9,6 +9,7 @@ export type SaplingStage =
   | "large"
   | "full";
 export type GameScreen = "play" | "shop" | "end-day" | "bank" | "invest";
+export type WeatherEvent = "none" | "rain" | "drought" | "storm";
 
 export interface Player {
   id: string;
@@ -107,6 +108,8 @@ export interface GameState {
   showWaterEffect: boolean;
   showCoinEffect: boolean;
   lastCoinAmount: number;
+  currentWeather: WeatherEvent;
+  weatherIntensity: number;
 
   // Game flow
   isPlaying: boolean;
@@ -120,6 +123,8 @@ export interface GameActions {
   // Tree actions
   waterTree: () => void;
   buyWater: (units: number) => void;
+  triggerWeatherEvent: (event: WeatherEvent) => void;
+  clearWeatherEvent: () => void;
 
   // Banking actions
   depositToSavings: (amount: number) => void;

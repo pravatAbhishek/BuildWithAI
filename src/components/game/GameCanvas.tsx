@@ -6,6 +6,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
 import { calculateTreeYield, canWaterTree } from "@/lib/gameEngine";
 import { BankPanel } from "@/components/banking";
+import { WeatherManager } from "./WeatherManager";
+import { WeatherOverlay } from "./WeatherOverlay";
 import type { AssetType, MarketAsset } from "@/types/game";
 
 type Phase = "morning" | "evening" | "night" | "sunrise";
@@ -76,7 +78,10 @@ export function GameCanvas() {
   };
 
   return (
-    <div
+    <>
+      <WeatherManager />
+      <WeatherOverlay />
+      <div
       className={`relative h-screen w-full overflow-hidden bg-gradient-to-b ${bgClass} transition-all duration-700`}
     >
       <TopHUD
@@ -170,6 +175,7 @@ export function GameCanvas() {
         )}
       </AnimatePresence>
     </div>
+    </>
   );
 }
 

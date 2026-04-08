@@ -25,6 +25,12 @@ export const GAME_CONFIG = {
 
   // Days
   WATERING_SESSIONS_PER_DAY: 3, // After this many waterings, day can end
+
+  // Weather Events
+  WEATHER_RAIN_BONUS: 0.2, // 20% water bonus during rain
+  WEATHER_DROUGHT_PENALTY: 0.5, // 50% earnings penalty during drought
+  WEATHER_STORM_PENALTY: 0.3, // 30% earnings penalty during storm
+  WEATHER_EVENT_DURATION: 5, // Days a weather event lasts
 } as const;
 
 export const MARKET_ASSETS = [

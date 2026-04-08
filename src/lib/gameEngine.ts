@@ -133,3 +133,29 @@ export function createInitialTree(): Tree {
     totalWaterings: 0,
   };
 }
+
+/**
+ * Apply weather modifier to earnings
+ */
+export function applyWeatherModifier(
+  earnings: number,
+  weatherType: string,
+): number {
+  switch (weatherType) {
+    case "rain":
+      // Rain actually helps - bonus to water efficiency (no money bonus)
+      return earnings;
+    case "drought":
+      // Drought reduces earnings
+      return Math.floor(
+        earnings * (1 - GAME_CONFIG.WEATHER_DROUGHT_PENALTY),
+      );
+    case "storm":
+      // Storm reduces earnings
+      return Math.floor(
+        earnings * (1 - GAME_CONFIG.WEATHER_STORM_PENALTY),
+      );
+    default:
+      return earnings;
+  }
+}

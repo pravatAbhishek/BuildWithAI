@@ -8,6 +8,7 @@ import type {
   DailyLesson,
   MarketAsset,
   GameScreen,
+  WeatherEvent,
 } from "@/types/game";
 import { GAME_CONFIG, MARKET_ASSETS } from "@/lib/constants";
 import {
@@ -86,6 +87,8 @@ const initialState: GameState = {
   showWaterEffect: false,
   showCoinEffect: false,
   lastCoinAmount: 0,
+  currentWeather: "none",
+  weatherIntensity: 0,
   isPlaying: true,
   showEndOfDay: false,
   showLesson: false,
@@ -383,6 +386,22 @@ export const useGameStore = create<GameState & GameActions>()(
       loadGame: () => {
         // Persistence is handled by zustand/persist middleware
         // This is here for manual reload if needed
+      },
+
+      // Trigger weather event
+      triggerWeatherEvent: (event: WeatherEvent) => {
+        set({
+          currentWeather: event,
+          weatherIntensity: event === "none" ? 0 : 100,
+        });
+      },
+
+      // Clear weather event
+      clearWeatherEvent: () => {
+        set({
+          currentWeather: "none",
+          weatherIntensity: 0,
+        });
       },
     }),
     {

@@ -8,7 +8,7 @@ import { calculateWaterCost } from "@/lib/gameEngine";
 
 export function WaterShop() {
   const { player, buyWater } = useGameStore();
-  const [quantity, setQuantity] = useState(GAME_CONFIG.WATER_BUNDLE_SIZE);
+  const [quantity, setQuantity] = useState<number>(GAME_CONFIG.WATER_BUNDLE_SIZE);
 
   const cost = calculateWaterCost(quantity);
   const canAfford = player.wallet >= cost;

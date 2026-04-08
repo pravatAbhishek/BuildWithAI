@@ -14,3 +14,10 @@ export { GameHUD } from "./GameHUD";
 export { AIAdvisor } from "./AIAdvisor";
 export { ShopOverlay } from "./ShopOverlay";
 export { EndDayScreen } from "./EndDayScreen";
+
+// Weather components
+export { RainEffect } from "./RainEffect";
+export { StormEffect } from "./StormEffect";
+export { DroughtEffect } from "./DroughtEffect";
+export { WeatherManager } from "./WeatherManager";
+export { WeatherOverlay } from "./WeatherOverlay";
