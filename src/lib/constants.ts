@@ -2,26 +2,41 @@
 
 export const GAME_CONFIG = {
   // Starting values
-  INITIAL_MONEY: 100,
-  INITIAL_WATER: 10,
+  INITIAL_MONEY: 0, // Start with zero balance
+  INITIAL_WATER: 10, // Start with 10 water drops
 
-  // Water mechanics
-  WATER_COST: 10, // Cost per water unit
-  WATER_BUNDLE_SIZE: 5, // Units per purchase
+  // Water mechanics - updated pricing
+  WATER_COST_SINGLE: 100, // Cost for 1 water drop
+  WATER_COST_5: 450, // Cost for 5 water drops (10% discount)
+  WATER_COST_10: 900, // Cost for 10 water drops (10% discount)
 
   // Tree mechanics
-  BASE_TREE_YIELD: 25, // Base money per watering
+  BASE_TREE_YIELD: 120, // ₹120 per watering (per drop)
   MAX_WATERING_PER_DAY: 3, // Maximum times tree can be watered per day
   TREE_HEALTH_DECAY: 5, // Health lost if not watered
   TREE_HEALTH_GAIN: 10, // Health gained per watering
 
   // Banking - Savings Account
-  SAVINGS_INTEREST_RATE: 0.002, // 0.2% daily (low but safe)
+  SAVINGS_INTEREST_RATE: 0.01, // 1% daily interest
 
-  // Banking - Investing Account
-  FD_MINIMUM_AMOUNT: 50,
-  FD_LOCK_DAYS: 3,
-  FD_INTEREST_RATE: 0.06, // 6% after 3 days
+  // Banking - Fixed Deposit options
+  FD_MINIMUM_AMOUNT: 100,
+  FD_OPTIONS: [
+    { days: 3, rate: 0.05, label: "3 Days - 5%" },
+    { days: 7, rate: 0.08, label: "7 Days - 8%" },
+    { days: 15, rate: 0.12, label: "15 Days - 12%" },
+    { days: 30, rate: 0.20, label: "30 Days - 20%" },
+  ],
+  FD_EARLY_WITHDRAWAL_PENALTY: 0.15, // 15% penalty for early withdrawal
+
+  // Banking - SIP (Systematic Investment Plan)
+  SIP_MIN_AMOUNT: 50,
+  SIP_INTERVALS: [
+    { days: 1, label: "Daily" },
+    { days: 3, label: "Every 3 Days" },
+    { days: 7, label: "Weekly" },
+  ],
+  SIP_GROWTH_RATE: 0.02, // 2% growth per interval
 
   // Days
   WATERING_SESSIONS_PER_DAY: 3, // After this many waterings, day can end
@@ -35,77 +50,90 @@ export const GAME_CONFIG = {
   WEATHER_DROUGHT_CLEAR_COST: 100,
   WEATHER_STORM_CLEAR_COST: 150,
   WEATHER_DAILY_WATER_BONUS: 10,
+  BASE_STORM_CHANCE: 0.05, // 5% base chance of storm each day
+
+  // Asset maintenance intervals
+  CAR_MAINTENANCE_INTERVAL: 15, // Every 15 days
+  CAR_MAINTENANCE_BASE_COST: 2, // Starting maintenance cost (doubles each time)
+  SMARTPHONE_MAINTENANCE_COST: 400, // One-time repair after storm
 } as const;
 
 export const MARKET_ASSETS = [
   // Depreciating Assets
   {
-    id: "bicycle",
-    name: "🚲 Bicycle",
+    id: "smartphone",
+    name: "📱 Smartphone",
     type: "depreciating" as const,
-    description: "A fancy bicycle! Gives you a boost but needs maintenance.",
-    basePrice: 200,
-    currentPrice: 200,
-    boostMultiplier: 1.3, // 30% more income
-    boostDuration: 5, // For 5 days
-    depreciationRate: 0.1, // Loses 10% value daily after boost
-    maintenanceCost: 5, // Costs 5 per day after boost
-  },
-  {
-    id: "scooter",
-    name: "🛵 Scooter",
-    type: "depreciating" as const,
-    description: "A motorized scooter! Great boost but expensive to maintain.",
-    basePrice: 500,
-    currentPrice: 500,
-    boostMultiplier: 1.5, // 50% more income
-    boostDuration: 7, // For 7 days
-    depreciationRate: 0.08, // Loses 8% value daily after boost
-    maintenanceCost: 15, // Costs 15 per day after boost
+    description: "High earnings for 2 days, but increases storm risk after! Maintenance: ₹400",
+    basePrice: 1000,
+    currentPrice: 1000,
+    boostMultiplier: 4.0, // 300% more = 4x income
+    boostDuration: 2, // For 2 days only
+    depreciationRate: 0.15, // Loses 15% value daily after boost
+    maintenanceCost: 400, // Storm repair cost
+    stormChanceBoost: 0.35, // +35% storm chance after 3-4 days until storm
+    stormTriggerDay: 3, // Days after purchase when storm chance increases
   },
   {
     id: "car",
     name: "🚗 Car",
     type: "depreciating" as const,
-    description: "A car! Amazing boost but very expensive maintenance.",
-    basePrice: 1500,
-    currentPrice: 1500,
-    boostMultiplier: 2.0, // 100% more income
-    boostDuration: 10, // For 10 days
-    depreciationRate: 0.05, // Loses 5% value daily after boost
-    maintenanceCost: 50, // Costs 50 per day after boost
+    description: "Water costs ₹10-15 less each! Maintenance every 15 days increases exponentially.",
+    basePrice: 2000,
+    currentPrice: 2000,
+    waterCostReduction: 12, // Reduces water cost by ₹12 each
+    boostMultiplier: 1.0, // No direct income boost
+    boostDuration: 999, // Permanent effect
+    depreciationRate: 0.05, // Loses 5% value daily
+    maintenanceInterval: 15, // Every 15 days
+    maintenanceBaseCost: 2, // Starts at ₹2, doubles each time
+  },
+  {
+    id: "bicycle",
+    name: "🚲 Bicycle",
+    type: "depreciating" as const,
+    description: "A starter vehicle! Small boost, low maintenance.",
+    basePrice: 300,
+    currentPrice: 300,
+    boostMultiplier: 1.3, // 30% more income
+    boostDuration: 7, // For 7 days
+    depreciationRate: 0.08, // Loses 8% value daily after boost
+    maintenanceCost: 20, // Costs ₹20 per day after boost
   },
 
   // Appreciating Assets
   {
-    id: "gold_coin",
-    name: "🪙 Gold Coin",
+    id: "gold",
+    name: "🪙 Gold",
     type: "appreciating" as const,
-    description: "A small gold investment. Safe and steady growth.",
-    basePrice: 100,
-    currentPrice: 100,
-    appreciationRate: 0.01, // 1% daily growth
-    peakDay: 30, // Peaks at day 30 from purchase
+    description: "No immediate benefit. Value grows 10% every 15 days! Long-term wealth.",
+    basePrice: 500,
+    currentPrice: 500,
+    appreciationRate: 0.10, // 10% growth
+    appreciationInterval: 15, // Every 15 days
+    peakDay: 90, // Peaks at day 90 from purchase
   },
   {
-    id: "silver_set",
-    name: "🥈 Silver Set",
+    id: "silver",
+    name: "🥈 Silver",
     type: "appreciating" as const,
-    description: "A set of silver items. Good appreciation over time.",
-    basePrice: 300,
-    currentPrice: 300,
-    appreciationRate: 0.015, // 1.5% daily growth
-    peakDay: 25, // Peaks at day 25 from purchase
+    description: "Affordable precious metal. Value grows 8% every 15 days.",
+    basePrice: 200,
+    currentPrice: 200,
+    appreciationRate: 0.08, // 8% growth every interval
+    appreciationInterval: 15, // Every 15 days
+    peakDay: 75, // Peaks at day 75 from purchase
   },
   {
     id: "land_plot",
-    name: "🏞️ Land Plot",
+    name: "🏞️ Land",
     type: "appreciating" as const,
-    description: "A small piece of land. Excellent long-term investment!",
-    basePrice: 1000,
-    currentPrice: 1000,
-    appreciationRate: 0.025, // 2.5% daily growth
-    peakDay: 40, // Peaks at day 40 from purchase
+    description: "Real estate! Grows 15% every 15 days. The best long-term investment.",
+    basePrice: 1500,
+    currentPrice: 1500,
+    appreciationRate: 0.15, // 15% growth every interval
+    appreciationInterval: 15, // Every 15 days
+    peakDay: 120, // Peaks at day 120 from purchase
   },
 ];
 

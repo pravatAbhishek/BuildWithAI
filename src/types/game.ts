@@ -33,7 +33,7 @@ export interface Tree {
 
 export interface SavingsAccount {
   balance: number;
-  interestRate: number; // Daily interest rate (e.g., 0.001 = 0.1%)
+  interestRate: number; // Daily interest rate (e.g., 0.01 = 1%)
 }
 
 export interface FixedDeposit {
@@ -43,6 +43,20 @@ export interface FixedDeposit {
   startDay: number;
   maturityDay: number; // When it can be withdrawn
   matured: boolean;
+  durationDays: number; // Duration selected
+}
+
+// SIP - Systematic Investment Plan
+export interface SIP {
+  id: string;
+  amount: number; // Amount to invest each interval
+  intervalDays: number; // How often to invest (1 = daily, 7 = weekly)
+  startDay: number;
+  lastInvestmentDay: number; // Last day investment was made
+  totalInvested: number; // Cumulative amount invested
+  currentValue: number; // Current value with growth
+  growthRate: number; // Growth rate per interval
+  isActive: boolean;
 }
 
 export type AssetType = "appreciating" | "depreciating";
@@ -57,15 +71,28 @@ export interface Asset {
   purchaseDay: number;
 
   // For appreciating assets
-  appreciationRate?: number; // Daily appreciation rate
+  appreciationRate?: number; // Growth rate per interval
+  appreciationInterval?: number; // Days between appreciation (default 15)
   peakDay?: number; // Day when value peaks before potential decline
 
   // For depreciating assets
   boostMultiplier?: number; // Income multiplier while active
   boostDuration?: number; // Days the boost lasts
   depreciationRate?: number; // Daily depreciation rate
-  maintenanceCost?: number; // Daily cost after boost period
+  maintenanceCost?: number; // Cost after boost period
   boostExpired?: boolean;
+
+  // For smartphone - storm mechanic
+  stormChanceBoost?: number; // Increased storm chance
+  stormTriggerDay?: number; // Days until storm chance increases
+  hasTriggeredStorm?: boolean; // Whether storm boost is active
+
+  // For car - water cost reduction
+  waterCostReduction?: number; // Reduces water cost by this amount
+  maintenanceInterval?: number; // Days between maintenance
+  maintenanceBaseCost?: number; // Base cost, doubles each time
+  maintenanceCount?: number; // Number of times maintained
+  nextMaintenanceDay?: number; // Next day maintenance is due
 }
 
 export interface MarketAsset {
@@ -78,11 +105,17 @@ export interface MarketAsset {
 
   // Config for when purchased
   appreciationRate?: number;
+  appreciationInterval?: number;
   peakDay?: number;
   boostMultiplier?: number;
   boostDuration?: number;
   depreciationRate?: number;
   maintenanceCost?: number;
+  stormChanceBoost?: number;
+  stormTriggerDay?: number;
+  waterCostReduction?: number;
+  maintenanceInterval?: number;
+  maintenanceBaseCost?: number;
 }
 
 export interface DailyLesson {
@@ -91,6 +124,8 @@ export interface DailyLesson {
   content: string;
   tip: string;
   basedOn: string[]; // What player actions triggered this lesson
+  goodDecisions?: string[]; // What went well
+  improvements?: string[]; // What could be better
 }
 
 export interface GameState {
@@ -98,6 +133,7 @@ export interface GameState {
   tree: Tree;
   savings: SavingsAccount;
   fixedDeposits: FixedDeposit[];
+  sips: SIP[]; // Active SIPs
   ownedAssets: Asset[];
   marketAssets: MarketAsset[];
   lessons: DailyLesson[];
@@ -115,12 +151,18 @@ export interface GameState {
   todayBankSaved: number;
   todaySavingsDeposited: number;
 
+  // Storm chance modifier (from smartphone)
+  stormChanceModifier: number;
+
   // Game flow
   isPlaying: boolean;
   showEndOfDay: boolean;
   showLesson: boolean;
   currentLesson: DailyLesson | null;
   aiTip: string | null;
+
+  // Bank modal access during day
+  showBankModal: boolean;
 }
 
 export interface GameActions {
@@ -134,8 +176,12 @@ export interface GameActions {
   // Banking actions
   depositToSavings: (amount: number) => void;
   withdrawFromSavings: (amount: number) => void;
-  createFixedDeposit: (amount: number, days?: number) => void;
+  createFixedDeposit: (amount: number, durationDays: number) => void;
   withdrawFixedDeposit: (fdId: string) => void;
+
+  // SIP actions
+  createSIP: (amount: number, intervalDays: number) => void;
+  cancelSIP: (sipId: string) => void;
 
   // New money management (end of day)
   saveToBank: (amount: number) => void;
@@ -151,6 +197,7 @@ export interface GameActions {
 
   // Screen navigation
   setScreen: (screen: GameScreen) => void;
+  toggleBankModal: () => void;
 
   // Visual effects
   triggerWaterEffect: () => void;

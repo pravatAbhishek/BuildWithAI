@@ -1,246 +1,188 @@
-# 🌱 Growtopia - Financial Literacy Game for Kids
+# 🌱 Growtopia
 
-An educational game that teaches village children about investment, saving, and money management through an engaging tree-watering mechanic.
-
-## 🎯 Purpose
-
-This game is designed for **village kids who don't have exposure to investment, saving, and money management**. Through simple gameplay, children learn:
-
-- How to earn money (work → income)
-- The importance of saving
-- Difference between savings accounts and fixed deposits
-- Appreciating vs depreciating assets
-- The true cost of ownership (maintenance costs)
-- Long-term thinking and patience in investments
+Growtopia is a kid-friendly financial learning game built with Next.js, TypeScript, Zustand, and Framer Motion.  
+Players earn by watering a tree, then learn saving/investing through Savings, FD, SIP, and asset choices.
 
 ---
 
-## 🎮 Core Game Mechanics
-
-### 1. Tree & Water System
-
-- Players have a **money tree** that produces money when watered
-- Each watering session earns money based on tree health and level
-- Maximum 3 watering sessions per day
-- Water must be purchased with earned money
-
-### 2. Banking System (End of Day)
-
-| Type                   | Interest Rate  | Availability      | Best For                    |
-| ---------------------- | -------------- | ----------------- | --------------------------- |
-| **Savings Account**    | 0.2% daily     | Immediate         | Emergency fund, daily needs |
-| **Fixed Deposit (FD)** | 5% for 10 days | After lock period | Long-term growth            |
-
-### 3. Asset System
-
-#### Appreciating Assets 📈
-
-- **Gold Coin** - 1% daily growth, peaks at day 30
-- **Silver Set** - 1.5% daily growth, peaks at day 25
-- **Land Plot** - 2.5% daily growth, peaks at day 40
-
-_Lesson: Patient investments grow over time!_
-
-#### Depreciating Assets 📉
-
-- **Bicycle** - 30% income boost for 5 days, then ₹5/day maintenance
-- **Scooter** - 50% income boost for 7 days, then ₹15/day maintenance
-- **Car** - 100% income boost for 10 days, then ₹50/day maintenance
-
-_Lesson: Vehicles give short-term boosts but become liabilities!_
-
-### 4. Daily AI Lessons
-
-- Personalized lessons at end of each day
-- Based on player actions and decisions
-- Teaches real-world financial concepts
-
----
-
-## 📁 Project Structure
-
-```
-src/
-├── app/
-│   ├── page.tsx                 # Main game page
-│   ├── layout.tsx               # App layout
-│   ├── globals.css              # Global styles
-│   └── api/
-│       ├── game/route.ts        # Game state API
-│       ├── lesson/route.ts      # AI lesson generation
-│       └── market/route.ts      # Asset market prices
-├── components/
-│   ├── game/
-│   │   ├── Tree.tsx             # Tree watering interface
-│   │   ├── WaterShop.tsx        # Buy water
-│   │   ├── GameStats.tsx        # Stats display
-│   │   └── EndOfDayModal.tsx    # Day transition
-│   ├── banking/
-│   │   ├── BankPanel.tsx        # Banking tab container
-│   │   ├── SavingsAccount.tsx   # Deposit/withdraw savings
-│   │   └── FixedDeposit.tsx     # FD management
-│   ├── assets/
-│   │   ├── AssetShop.tsx        # Buy assets
-│   │   ├── AssetCard.tsx        # Asset display card
-│   │   └── Portfolio.tsx        # Owned assets view
-│   ├── lesson/
-│   │   └── DailyLesson.tsx      # AI lesson modal
-│   └── ui/
-│       ├── Button.tsx           # Reusable button
-│       ├── Modal.tsx            # Modal component
-│       ├── Card.tsx             # Card component
-│       └── ProgressBar.tsx      # Progress indicator
-├── lib/
-│   ├── gameEngine.ts            # Core game logic
-│   ├── assetCalculator.ts       # Asset value calculations
-│   ├── bankingLogic.ts          # Interest & FD calculations
-│   └── constants.ts             # Game configuration
-├── store/
-│   └── gameStore.ts             # Zustand state management
-└── types/
-    └── game.ts                  # TypeScript interfaces
-```
-
----
-
-## 🔧 Tech Stack
-
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS 4
-- **State Management**: Zustand (with localStorage persistence)
-- **UI**: Custom components with emoji-based icons
-
----
-
-## 🚀 Getting Started
+## Quick Start
 
 ```bash
-# Install dependencies
 npm install
-
-# Run development server
 npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to play!
+Open `http://localhost:3000`.
 
----
-
-## 📊 Game Configuration
-
-All game values can be adjusted in `src/lib/constants.ts`:
-
-```typescript
-export const GAME_CONFIG = {
-  INITIAL_MONEY: 100, // Starting wallet
-  INITIAL_WATER: 5, // Starting water
-  WATER_COST: 10, // Cost per water unit
-  BASE_TREE_YIELD: 25, // Base money per watering
-  MAX_WATERING_PER_DAY: 3, // Watering limit
-  SAVINGS_INTEREST_RATE: 0.002, // 0.2% daily
-  FD_INTEREST_RATE: 0.05, // 5% for 10 days
-  FD_LOCK_DAYS: 10, // FD lock period
-};
-```
-
----
-
-## 🎨 UI Customization
-
-The current UI uses **placeholder components** designed for functionality.
-Figma designs will be integrated later to replace:
-
-- `src/components/ui/*` - All base UI components
-- Component styles in each feature component
-
-When updating UI:
-
-1. Replace component internals
-2. Keep the same props interface
-3. State management will continue working
-
----
-
-## 📚 Key Files to Understand
-
-| File                         | Purpose                         |
-| ---------------------------- | ------------------------------- |
-| `src/store/gameStore.ts`     | Central game state, all actions |
-| `src/lib/gameEngine.ts`      | Tree/watering calculations      |
-| `src/lib/bankingLogic.ts`    | Savings/FD interest math        |
-| `src/lib/assetCalculator.ts` | Asset appreciation/depreciation |
-| `src/lib/constants.ts`       | All game balance values         |
-| `src/types/game.ts`          | TypeScript interfaces           |
-
----
-
-## 🔮 Future Enhancements
-
-1. **AI Integration** - Replace static lessons with AI-generated content
-2. **Database** - Persist game state to database for multi-device play
-3. **Multiplayer** - Compare progress with friends
-4. **Achievements** - Unlock badges for financial milestones
-5. **More Assets** - Stocks, mutual funds, business investments
-6. **Events** - Random market events, emergencies
-7. **Localization** - Multiple Indian languages
-
----
-
-## 🧪 Testing
+Other scripts:
 
 ```bash
-# Run linter
 npm run lint
-
-# Run type checking
-npx tsc --noEmit
+npm run build
+npm run start
 ```
 
 ---
 
-## 📝 Development Notes
+## Current Gameplay Rules (Important)
 
-### State Persistence
+These are the **actual configured values**:
 
-Game state is automatically saved to `localStorage` via Zustand's persist middleware. Players can close and return without losing progress.
-
-### Adding New Assets
-
-1. Add to `MARKET_ASSETS` in `constants.ts`
-2. Follow the existing structure for appreciating/depreciating types
-3. Update `assetCalculator.ts` if new calculation logic needed
-
-### Adding New Lessons
-
-1. Add trigger keys to `LESSON_TRIGGERS` in `constants.ts`
-2. Add lesson content to `src/app/api/lesson/route.ts`
-3. Update game logic to trigger lessons at appropriate times
-
----
-
-## 🤝 Contributing
-
-This is an educational project. Contributions welcome for:
-
-- UI/UX improvements
-- New educational content
-- Bug fixes
-- Accessibility improvements
-- Translations
+- Initial wallet: `₹0`
+- Initial water: `10 drops`
+- Earning per watering: base `₹120` (further affected by health/level/assets)
+- Water pricing:
+  - `1` drop → `₹100`
+  - `5` drops → `₹450`
+  - `10` drops → `₹900`
+- Savings interest: `1%` daily
+- FD options:
+  - 3 days: 5%
+  - 7 days: 8%
+  - 15 days: 12%
+  - 30 days: 20%
+- SIP:
+  - min amount: `₹50`
+  - intervals: daily / every 3 days / weekly
+  - growth: `2%` per interval
 
 ---
 
-## 📄 License
+## How the App Is Structured
 
-Educational use - Created for village children's financial literacy.
+### 1) App entry (`src/app`)
+
+| File | Purpose |
+|---|---|
+| `src/app/page.tsx` | App home page; renders `GameCanvas` |
+| `src/app/layout.tsx` | Root HTML/body wrapper and metadata |
+| `src/app/globals.css` | Global styles + animation utilities |
+| `src/app/api/game/route.ts` | Server API endpoint for game data |
+| `src/app/api/lesson/route.ts` | Server API endpoint for lesson content |
+| `src/app/api/market/route.ts` | Server API endpoint for market data |
+
+### 2) Main game UI (`src/components/game`)
+
+| File | Purpose |
+|---|---|
+| `GameCanvas.tsx` | **Primary game screen** and flow orchestration (morning → evening → night → sunrise) |
+| `WeatherManager.tsx` | Weather state/event handling bridge |
+| `WeatherOverlay.tsx` | Renders weather effects over the scene |
+| `RainEffect.tsx` / `StormEffect.tsx` / `DroughtEffect.tsx` | Individual weather visuals |
+| `GameHUD.tsx` | Legacy HUD UI |
+| `Tree.tsx` | Legacy tree interaction UI |
+| `WaterShop.tsx` | Legacy standalone water purchase panel |
+| `ShopOverlay.tsx` | Legacy shop modal flow |
+| `EndDayScreen.tsx` / `EndOfDayModal.tsx` | Legacy end-of-day flows |
+| `Sky.tsx` / `Ground.tsx` / `Sapling.tsx` / `BackgroundTree.tsx` | Legacy scene pieces and decorative visuals |
+| `GameStats.tsx` | Legacy summary/stats panel |
+| `AIAdvisor.tsx` | Legacy advisor tip bubble |
+| `index.ts` | Re-exports game components |
+
+> **Target this first for UI/flow work:** `src/components/game/GameCanvas.tsx`
+
+### 3) Banking UI (`src/components/banking`)
+
+| File | Purpose |
+|---|---|
+| `BankPanel.tsx` | Banking tabs container (Savings + Invest) |
+| `SavingsAccount.tsx` | Deposit/withdraw savings interactions |
+| `FixedDeposit.tsx` | FD + SIP creation and management UI |
+| `index.ts` | Re-exports banking components |
+
+> **Target this for financial product UI changes:** `src/components/banking/*`
+
+### 4) Asset UI (`src/components/assets`)
+
+| File | Purpose |
+|---|---|
+| `AssetShop.tsx` | Legacy asset buying panel |
+| `AssetCard.tsx` | Shared card for market/owned assets |
+| `Portfolio.tsx` | Owned-asset portfolio list |
+| `index.ts` | Re-exports assets components |
+
+### 5) Lessons UI (`src/components/lesson`)
+
+| File | Purpose |
+|---|---|
+| `DailyLesson.tsx` | Daily review modal (good decisions + improvements + tip) |
+| `index.ts` | Re-exports lesson components |
+
+### 6) Shared UI primitives (`src/components/ui`)
+
+| File | Purpose |
+|---|---|
+| `Button.tsx` | Reusable button variants |
+| `Card.tsx` | Reusable card wrapper |
+| `Modal.tsx` | Reusable modal container |
+| `ProgressBar.tsx` | Reusable progress meter |
+| `index.ts` | Re-exports UI primitives |
 
 ---
 
-_Built with ❤️ for the next generation of smart money managers!_
+## Core Game Logic (Where Behavior Lives)
+
+| File | Purpose |
+|---|---|
+| `src/store/gameStore.ts` | **Single source of truth** for game state/actions (Zustand + persist) |
+| `src/lib/constants.ts` | All configuration values: pricing, rates, asset configs |
+| `src/lib/gameEngine.ts` | Earnings, watering checks, water costs, weather modifiers |
+| `src/lib/bankingLogic.ts` | Savings/FD/SIP calculations and helper logic |
+| `src/lib/assetCalculator.ts` | Asset appreciation/depreciation/maintenance logic |
+| `src/types/game.ts` | Strongly-typed interfaces for state, actions, assets, lessons |
+
+> **Target these for logic changes:** `store/gameStore.ts` + files in `lib/`.
+
+---
+
+## “Which File Should I Edit?” Guide
+
+| If you want to change... | Primary file(s) |
+|---|---|
+| Main gameplay flow/timers/phases | `src/components/game/GameCanvas.tsx` |
+| Balancing numbers (rates, prices, defaults) | `src/lib/constants.ts` |
+| How earning or watering is calculated | `src/lib/gameEngine.ts` |
+| Savings/FD/SIP math | `src/lib/bankingLogic.ts` |
+| Asset growth/decay/maintenance behavior | `src/lib/assetCalculator.ts` |
+| Central game state transitions/actions | `src/store/gameStore.ts` |
+| Daily lesson/review content format | `src/store/gameStore.ts` + `src/components/lesson/DailyLesson.tsx` |
+| Banking panel UI | `src/components/banking/*` |
+| Weather visuals | `src/components/game/*Effect.tsx` + `WeatherOverlay.tsx` |
+| Global animations/theme classes | `src/app/globals.css` |
+
+---
+
+## Architecture Notes
+
+1. UI components trigger actions from `useGameStore()`.
+2. Store actions call pure logic helpers in `src/lib/*`.
+3. Types in `src/types/game.ts` keep state/actions consistent.
+4. Zustand persist stores progress in local storage.
+
+This separation helps you change visuals without touching logic, or change logic without rewriting UI.
+
+---
+
+## Development Tips
+
+1. Prefer updating `constants.ts` for balance tweaks instead of hardcoding values.
+2. Keep heavy calculations in `lib/*` and use components only for rendering/interactions.
+3. If adding a new feature, update in this order:
+   1. `types/game.ts`
+   2. `lib/*` logic
+   3. `store/gameStore.ts` action wiring
+   4. `components/*` UI
+
+---
+
+## Tech Stack
+
+- Next.js 16 (App Router)
+- TypeScript (strict mode)
+- Zustand (state + persistence)
+- Framer Motion (animations)
+- Tailwind CSS 4 (styling)
+
+---
+
+Built for playful early-age financial learning. 🌟

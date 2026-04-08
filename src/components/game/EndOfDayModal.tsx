@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import { useGameStore } from "@/store/gameStore";
 import { Modal, Button } from "@/components/ui";
 import { calculateSavingsInterest } from "@/lib/bankingLogic";
@@ -13,7 +12,6 @@ export function EndOfDayModal() {
     fixedDeposits,
     ownedAssets,
     showEndOfDay,
-    endDay,
     startNewDay,
   } = useGameStore();
 

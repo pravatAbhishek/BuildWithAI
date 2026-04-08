@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import { useGameStore } from "@/store/gameStore";
 import type { SaplingStage } from "@/types/game";
 

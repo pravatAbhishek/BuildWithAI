@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import type { CSSProperties } from "react";
 
 export function Ground() {
   return (
@@ -83,7 +83,7 @@ export function Ground() {
   );
 }
 
-function GrassBlade({ style }: { style?: React.CSSProperties }) {
+function GrassBlade({ style }: { style?: CSSProperties }) {
   return (
     <div
       className="animate-grass-wave origin-bottom"
@@ -102,7 +102,7 @@ function Flower({
   style,
 }: {
   color: string;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
 }) {
   return (
     <div className="absolute animate-bloom" style={{ ...style }}>
@@ -140,7 +140,7 @@ function Mushroom({
   style,
   color = "#ff6b6b",
 }: {
-  style?: React.CSSProperties;
+  style?: CSSProperties;
   color?: string;
 }) {
   return (
@@ -170,7 +170,7 @@ function Butterfly({
   style,
   color = "#ff69b4",
 }: {
-  style?: React.CSSProperties;
+  style?: CSSProperties;
   color?: string;
 }) {
   return (

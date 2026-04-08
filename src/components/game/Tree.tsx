@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useGameStore } from "@/store/gameStore";
 import { Button, Card } from "@/components/ui";
 import { canWaterTree, calculateTreeYield } from "@/lib/gameEngine";

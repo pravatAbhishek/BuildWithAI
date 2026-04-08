@@ -1,8 +1,6 @@
 "use client";
 
-import React from "react";
 import { useGameStore } from "@/store/gameStore";
-import { canWaterTree } from "@/lib/gameEngine";
 
 export function GameHUD() {
   const { player, tree } = useGameStore();

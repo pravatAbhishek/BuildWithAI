@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useGameStore } from "@/store/gameStore";
 import { Button, Card } from "@/components/ui";
-import { GAME_CONFIG } from "@/lib/constants";
 
 export function SavingsAccount() {
   const { player, savings, depositToSavings, withdrawFromSavings } =

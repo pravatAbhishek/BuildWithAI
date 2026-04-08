@@ -1,17 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useGameStore } from "@/store/gameStore";
 import { Button, Card } from "@/components/ui";
 import { GAME_CONFIG } from "@/lib/constants";
-import { calculateWaterCost } from "@/lib/gameEngine";
+import { calculateWaterCost, getWaterBundleOptions } from "@/lib/gameEngine";
 
 export function WaterShop() {
-  const { player, buyWater } = useGameStore();
-  const [quantity, setQuantity] = useState<number>(GAME_CONFIG.WATER_BUNDLE_SIZE);
+  const { player, ownedAssets, buyWater } = useGameStore();
+  const [quantity, setQuantity] = useState<number>(1);
 
-  const cost = calculateWaterCost(quantity);
+  const cost = calculateWaterCost(quantity, ownedAssets);
   const canAfford = player.wallet >= cost;
+  const waterOptions = getWaterBundleOptions(ownedAssets);
 
   const handleBuy = () => {
     if (canAfford) {
@@ -30,45 +31,24 @@ export function WaterShop() {
           </span>
         </div>
 
-        {/* Quantity selector */}
-        <div>
-          <label className="block text-sm text-gray-600 mb-2">
-            Buy Water Units
+        {/* Quick select buttons with bundle prices */}
+        <div className="space-y-2">
+          <label className="block text-sm text-gray-600 mb-1">
+            Buy Water Drops
           </label>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setQuantity(Math.max(1, quantity - 1))}
-            >
-              -
-            </Button>
-            <div className="flex-1 text-center py-2 px-4 bg-gray-100 rounded-lg font-bold">
-              {quantity}
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setQuantity(quantity + 1)}
-            >
-              +
-            </Button>
+          <div className="flex gap-2">
+            {waterOptions.map((opt) => (
+              <Button
+                key={opt.units}
+                variant={quantity === opt.units ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => setQuantity(opt.units)}
+                className="flex-1"
+              >
+                {opt.units} = ₹{opt.cost}
+              </Button>
+            ))}
           </div>
-        </div>
-
-        {/* Quick select buttons */}
-        <div className="flex gap-2">
-          {[1, 5, 10].map((amt) => (
-            <Button
-              key={amt}
-              variant={quantity === amt ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => setQuantity(amt)}
-              className="flex-1"
-            >
-              {amt}
-            </Button>
-          ))}
         </div>
 
         {/* Price and buy button */}
@@ -89,7 +69,7 @@ export function WaterShop() {
 
         {/* Price info */}
         <p className="text-xs text-gray-500 text-center">
-          Price: ₹{GAME_CONFIG.WATER_COST} per unit
+          💡 1 drop = ₹{GAME_CONFIG.WATER_COST_SINGLE} | 5 drops = ₹{GAME_CONFIG.WATER_COST_5} (save ₹50) | 10 drops = ₹{GAME_CONFIG.WATER_COST_10} (save ₹100)
         </p>
       </div>
     </Card>

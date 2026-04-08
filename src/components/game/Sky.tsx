@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import type { CSSProperties } from "react";
 import { useGameStore } from "@/store/gameStore";
 
 export function Sky() {
@@ -161,7 +161,7 @@ function Cloud({
   style,
   size = "normal",
 }: {
-  style?: React.CSSProperties;
+  style?: CSSProperties;
   size?: "small" | "normal";
 }) {
   const scale = size === "small" ? 0.6 : 1;
@@ -183,7 +183,7 @@ function Cloud({
   );
 }
 
-function Bird({ style }: { style?: React.CSSProperties }) {
+function Bird({ style }: { style?: CSSProperties }) {
   return (
     <div className="absolute animate-bird-fly" style={{ ...style }}>
       <svg width="24" height="12" viewBox="0 0 24 12">

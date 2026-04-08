@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useEffect } from "react";
-import { Button } from "./Button";
+import { useEffect } from "react";
+import type { ReactNode } from "react";
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
   showCloseButton?: boolean;
 }
 

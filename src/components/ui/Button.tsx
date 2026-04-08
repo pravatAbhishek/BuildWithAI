@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "danger" | "success";
   size?: "sm" | "md" | "lg";
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export function Button({

@@ -38,10 +38,42 @@ export function calculateTreeYield(
 }
 
 /**
- * Calculate water cost for a bundle
+ * Calculate water cost based on quantity and owned assets
  */
-export function calculateWaterCost(units: number): number {
-  return units * GAME_CONFIG.WATER_COST;
+export function calculateWaterCost(units: number, assets: Asset[] = []): number {
+  // Calculate base cost based on bundle
+  let baseCost: number;
+  if (units === 1) {
+    baseCost = GAME_CONFIG.WATER_COST_SINGLE;
+  } else if (units === 5) {
+    baseCost = GAME_CONFIG.WATER_COST_5;
+  } else if (units === 10) {
+    baseCost = GAME_CONFIG.WATER_COST_10;
+  } else {
+    // For custom amounts, use single price
+    baseCost = units * GAME_CONFIG.WATER_COST_SINGLE;
+  }
+
+  // Apply car water cost reduction if owned
+  let reduction = 0;
+  for (const asset of assets) {
+    if (asset.waterCostReduction && !asset.boostExpired) {
+      reduction += asset.waterCostReduction * units;
+    }
+  }
+
+  return Math.max(0, baseCost - reduction);
+}
+
+/**
+ * Get water bundle options with prices
+ */
+export function getWaterBundleOptions(assets: Asset[] = []): Array<{ units: number; cost: number; label: string }> {
+  return [
+    { units: 1, cost: calculateWaterCost(1, assets), label: "1 Drop" },
+    { units: 5, cost: calculateWaterCost(5, assets), label: "5 Drops" },
+    { units: 10, cost: calculateWaterCost(10, assets), label: "10 Drops" },
+  ];
 }
 
 /**
@@ -111,8 +143,8 @@ export function createInitialPlayer(name: string = "Player"): Player {
   return {
     id: crypto.randomUUID(),
     name,
-    wallet: GAME_CONFIG.INITIAL_MONEY,
-    waterUnits: GAME_CONFIG.INITIAL_WATER,
+    wallet: GAME_CONFIG.INITIAL_MONEY, // Now 0
+    waterUnits: GAME_CONFIG.INITIAL_WATER, // 10 drops
     currentDay: 1,
     totalEarnings: 0,
     bankBalance: 0,
@@ -158,4 +190,23 @@ export function applyWeatherModifier(
     default:
       return earnings;
   }
+}
+
+/**
+ * Calculate storm chance based on owned assets
+ */
+export function calculateStormChance(assets: Asset[], currentDay: number): number {
+  let stormChance = GAME_CONFIG.BASE_STORM_CHANCE;
+
+  for (const asset of assets) {
+    if (asset.stormChanceBoost && asset.stormTriggerDay) {
+      const daysSincePurchase = currentDay - asset.purchaseDay;
+      // If past trigger day and storm hasn't occurred yet
+      if (daysSincePurchase >= asset.stormTriggerDay && !asset.hasTriggeredStorm) {
+        stormChance += asset.stormChanceBoost;
+      }
+    }
+  }
+
+  return Math.min(stormChance, 0.5); // Cap at 50%
 }

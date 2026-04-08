@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import { useGameStore } from "@/store/gameStore";
 import { Card } from "@/components/ui";
 import { AssetCard } from "./AssetCard";

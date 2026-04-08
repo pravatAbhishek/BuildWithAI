@@ -19,6 +19,7 @@ import {
   createInitialPlayer,
   createInitialTree,
   calculateWaterCost,
+  getWaterBundleOptions,
 } from "@/lib/gameEngine";
 import {
   createInitialSavings,
@@ -28,6 +29,10 @@ import {
   createFixedDeposit as createFD,
   updateFDMaturityStatus,
   withdrawFD,
+  createSIP as createNewSIP,
+  applySIPGrowth,
+  cancelSIP as cancelSIPFn,
+  processSIPForDay,
 } from "@/lib/bankingLogic";
 import {
   updateAssetValues,
@@ -43,10 +48,12 @@ const AI_TIPS = {
   investor: "📈 Smart! Investments grow over time but need patience.",
   wateringDone: "🌙 Great work today! End the day to see what happens next.",
   firstDay: "👋 Welcome! Tap your plant to water it and earn coins!",
-  bankTip: "🏦 Bank savings are safe and earn small daily interest.",
+  bankTip: "🏦 Bank savings are safe and earn 1% daily interest.",
   investTip: "🌱 Investments grow faster but you can't use them right away.",
   shopTip: "🛒 Assets can boost your earnings! Check the shop.",
   balanced: "⚖️ Great balance of saving and spending! Keep it up!",
+  sipTip: "📊 SIPs help you invest regularly - small amounts add up!",
+  fdTip: "🔒 FDs lock your money but give great returns when mature.",
 };
 
 function getAITip(state: GameState): string {
@@ -62,7 +69,10 @@ function getAITip(state: GameState): string {
   if (state.tree.timesWateredToday >= 3) {
     return AI_TIPS.wateringDone;
   }
-  if (state.player.bankBalance > 100) {
+  if (state.sips.length > 0) {
+    return AI_TIPS.sipTip;
+  }
+  if (state.savings.balance > 100) {
     return AI_TIPS.goodSaver;
   }
   if (state.player.investmentBalance > 100) {
@@ -74,11 +84,78 @@ function getAITip(state: GameState): string {
   return AI_TIPS.balanced;
 }
 
+// Generate insightful daily lesson
+function generateDailyLesson(state: GameState): DailyLesson {
+  const dailyEarnings = state.player.totalEarnings - state.dayStartTotalEarnings;
+  const savedToday = state.todayBankSaved;
+  const savingsDepositedToday = state.todaySavingsDeposited;
+  const investedToday = state.todayInvested;
+  const totalSavedToday = savedToday + savingsDepositedToday;
+
+  const goodDecisions: string[] = [];
+  const improvements: string[] = [];
+
+  // Analyze good decisions
+  if (state.tree.timesWateredToday >= 3) {
+    goodDecisions.push("You watered your plant the maximum times - great productivity!");
+  }
+  if (totalSavedToday > dailyEarnings * 0.2) {
+    goodDecisions.push("You saved more than 20% of your earnings - smart saving habit!");
+  }
+  if (state.savings.balance > 0) {
+    goodDecisions.push("You have money in savings earning 1% daily interest!");
+  }
+  if (state.fixedDeposits.length > 0) {
+    goodDecisions.push("You have FDs growing your wealth for the future!");
+  }
+  if (state.sips.length > 0) {
+    goodDecisions.push("Your SIPs are building wealth automatically!");
+  }
+
+  // Analyze areas for improvement
+  if (totalSavedToday === 0 && dailyEarnings > 100) {
+    improvements.push("Consider saving some money - even small amounts add up!");
+  }
+  if (state.savings.balance === 0 && state.player.wallet > 200) {
+    improvements.push("Opening a savings account gives you daily interest.");
+  }
+  if (state.ownedAssets.length === 0 && state.player.currentDay > 3) {
+    improvements.push("Check out assets in the shop - they can boost your earnings!");
+  }
+  if (state.player.waterUnits < 3) {
+    improvements.push("Buy more water to keep earning tomorrow!");
+  }
+
+  // Asset impact summary
+  let assetImpact = "";
+  const depreciating = state.ownedAssets.filter((a) => a.type === "depreciating");
+  const appreciating = state.ownedAssets.filter((a) => a.type === "appreciating");
+
+  if (depreciating.length > 0 || appreciating.length > 0) {
+    assetImpact = `\n\n📦 You own ${depreciating.length} depreciating asset(s) (quick boost, loses value) and ${appreciating.length} appreciating asset(s) (grows over time).`;
+  }
+
+  const lesson: DailyLesson = {
+    day: state.player.currentDay,
+    title: `Day ${state.player.currentDay} Review`,
+    content: `Today you earned ₹${dailyEarnings} and saved ₹${totalSavedToday}. Your total savings: ₹${state.savings.balance}. Bank balance: ₹${state.player.bankBalance}.${assetImpact}`,
+    tip: goodDecisions.length > 0 
+      ? goodDecisions[0] 
+      : "Remember: Save a little every day and your money will grow!",
+    basedOn: ["daily_performance"],
+    goodDecisions,
+    improvements,
+  };
+
+  return lesson;
+}
+
 const initialState: GameState = {
   player: createInitialPlayer(),
   tree: createInitialTree(),
   savings: createInitialSavings(),
   fixedDeposits: [],
+  sips: [],
   ownedAssets: [],
   marketAssets: MARKET_ASSETS as MarketAsset[],
   lessons: [],
@@ -93,11 +170,13 @@ const initialState: GameState = {
   todayInvested: 0,
   todayBankSaved: 0,
   todaySavingsDeposited: 0,
+  stormChanceModifier: 0,
   isPlaying: true,
   showEndOfDay: false,
   showLesson: false,
   currentLesson: null,
   aiTip: AI_TIPS.firstDay,
+  showBankModal: false,
 };
 
 export const useGameStore = create<GameState & GameActions>()(
@@ -143,7 +222,7 @@ export const useGameStore = create<GameState & GameActions>()(
       // Buy water
       buyWater: (units: number) => {
         const state = get();
-        const cost = calculateWaterCost(units);
+        const cost = calculateWaterCost(units, state.ownedAssets);
         if (state.player.wallet < cost) return;
 
         set({
@@ -187,12 +266,12 @@ export const useGameStore = create<GameState & GameActions>()(
       // Create fixed deposit
       createFixedDeposit: (
         amount: number,
-        days: number = GAME_CONFIG.FD_LOCK_DAYS,
+        durationDays: number = 3,
       ) => {
         const state = get();
         if (amount <= 0 || state.player.wallet < amount) return;
 
-        const fd = createFD(amount, state.player.currentDay, days);
+        const fd = createFD(amount, state.player.currentDay, durationDays);
         if (!fd) return;
 
         set({
@@ -217,6 +296,40 @@ export const useGameStore = create<GameState & GameActions>()(
           player: {
             ...state.player,
             wallet: state.player.wallet + result.amount,
+          },
+        });
+      },
+
+      // Create SIP
+      createSIP: (amount: number, intervalDays: number) => {
+        const state = get();
+        if (amount <= 0 || state.player.wallet < amount) return;
+
+        const sip = createNewSIP(amount, intervalDays, state.player.currentDay);
+        if (!sip) return;
+
+        set({
+          sips: [...state.sips, sip],
+          player: {
+            ...state.player,
+            wallet: state.player.wallet - amount, // First installment
+          },
+        });
+      },
+
+      // Cancel SIP
+      cancelSIP: (sipId: string) => {
+        const state = get();
+        const sip = state.sips.find((s) => s.id === sipId);
+        if (!sip) return;
+
+        const result = cancelSIPFn(sip);
+
+        set({
+          sips: state.sips.filter((s) => s.id !== sipId),
+          player: {
+            ...state.player,
+            wallet: state.player.wallet + result.returnAmount,
           },
         });
       },
@@ -264,73 +377,57 @@ export const useGameStore = create<GameState & GameActions>()(
       // Start new day
       startNewDay: () => {
         const state = get();
+        const nextDay = state.player.currentDay + 1;
 
         // Apply daily changes
         const newSavings = applySavingsInterest(state.savings);
-        const newFDs = updateFDMaturityStatus(
-          state.fixedDeposits,
-          state.player.currentDay + 1,
-        );
-        const newAssets = updateAssetValues(
-          state.ownedAssets,
-          state.player.currentDay + 1,
-        );
+        const newFDs = updateFDMaturityStatus(state.fixedDeposits, nextDay);
+        const newAssets = updateAssetValues(state.ownedAssets, nextDay);
+        
+        // Apply SIP growth
+        const newSips = applySIPGrowth(state.sips, nextDay);
+        
         // Investment growth (5% daily)
-        const investmentGrowth = Math.floor(
-          state.player.investmentBalance * 0.05,
-        );
-        // Bank interest (1% daily)
+        const investmentGrowth = Math.floor(state.player.investmentBalance * 0.05);
+        
+        // Bank interest (1% daily) - applied to wallet when bank balance transfers
         const bankInterest = Math.floor(state.player.bankBalance * 0.01);
 
-        // Generate lesson placeholder (will be replaced with AI)
-        const dailyEarnings =
-          state.player.totalEarnings - state.dayStartTotalEarnings;
-        const savedToday = state.todayBankSaved;
-        const savingsDepositedToday = state.todaySavingsDeposited;
-        const investedToday = state.todayInvested;
-        const additionalWater =
-          state.currentWeather !== "none"
-            ? GAME_CONFIG.WEATHER_DAILY_WATER_BONUS
-            : 0;
+        // Additional water from weather
+        const additionalWater = state.currentWeather !== "none" 
+          ? GAME_CONFIG.WEATHER_DAILY_WATER_BONUS 
+          : 0;
 
-        // Asset impact summary
-        let assetImpact = "";
-        const depreciating = state.ownedAssets.filter(
-          (a) => a.type === "depreciating",
-        );
-        const appreciating = state.ownedAssets.filter(
-          (a) => a.type === "appreciating",
-        );
+        // Generate enhanced lesson
+        const lesson = generateDailyLesson(state);
 
-        if (depreciating.length > 0 || appreciating.length > 0) {
-          assetImpact = `\n\nYou own ${depreciating.length} depreciating asset(s) that provide immediate income but lose value, and ${appreciating.length} appreciating asset(s) that grow in value over time. In real life, this is like owning both a car (depreciates, costs maintenance) and property (appreciates, long-term investment).`;
+        // Calculate new wallet (bank balance + interest transfers to wallet)
+        const newWallet = state.player.wallet + state.player.bankBalance + bankInterest;
+
+        // Process SIP installments for the new day
+        let sipDeductions = 0;
+        let updatedSips = newSips;
+        for (let i = 0; i < updatedSips.length; i++) {
+          const sip = updatedSips[i];
+          const result = processSIPForDay(sip, nextDay, newWallet - sipDeductions);
+          if (result.invested) {
+            updatedSips = updatedSips.map((s) => s.id === sip.id ? result.sip : s);
+            sipDeductions += result.amountDeducted;
+          }
         }
-
-        const totalSavedToday = savedToday + savingsDepositedToday;
-
-        const lesson: DailyLesson = {
-          day: state.player.currentDay,
-          title: `Day ${state.player.currentDay} Review`,
-          content: `Today you watered your tree ${state.tree.timesWateredToday} time(s) and earned ₹${dailyEarnings}. You saved ₹${totalSavedToday} in your accounts (₹${savedToday} to bank, ₹${savingsDepositedToday} to savings - total ₹${state.player.bankBalance + state.savings.balance}). You invested ₹${investedToday}. Your bank and savings provide liquid funds with daily interest, while investments grow faster but are locked. In the real world, this is like balancing cash for daily needs, savings for security, and investments for long-term growth.${assetImpact}`,
-          tip: `Good financial habits: Save emergency funds, invest for growth, diversify assets, and always keep some cash available.`,
-          basedOn: ["daily_performance"],
-        };
-
-        const newWallet =
-          state.player.wallet + state.player.bankBalance + bankInterest;
 
         set({
           tree: resetTreeForNewDay(state.tree),
           savings: newSavings,
           fixedDeposits: newFDs,
+          sips: updatedSips,
           ownedAssets: newAssets,
           player: {
             ...state.player,
-            currentDay: state.player.currentDay + 1,
-            wallet: newWallet,
+            currentDay: nextDay,
+            wallet: newWallet - sipDeductions,
             bankBalance: 0,
-            investmentBalance:
-              state.player.investmentBalance + investmentGrowth,
+            investmentBalance: state.player.investmentBalance + investmentGrowth,
             waterUnits: state.player.waterUnits + additionalWater,
           },
           lessons: [...state.lessons, lesson],
@@ -341,7 +438,9 @@ export const useGameStore = create<GameState & GameActions>()(
           timeOfDay: "morning",
           dayStartTotalEarnings: state.player.totalEarnings,
           todayInvested: 0,
-          todayBankSaved: 0,          todaySavingsDeposited: 0,        });
+          todayBankSaved: 0,
+          todaySavingsDeposited: 0,
+        });
 
         // Update AI tip
         const newState = get();
@@ -351,6 +450,12 @@ export const useGameStore = create<GameState & GameActions>()(
       // Screen navigation
       setScreen: (screen: GameScreen) => {
         set({ currentScreen: screen });
+      },
+
+      // Toggle bank modal (for anytime access)
+      toggleBankModal: () => {
+        const state = get();
+        set({ showBankModal: !state.showBankModal });
       },
 
       // Save to bank (end of day)
@@ -414,9 +519,11 @@ export const useGameStore = create<GameState & GameActions>()(
           tree: createInitialTree(),
           savings: createInitialSavings(),
           fixedDeposits: [],
+          sips: [],
           ownedAssets: [],
           lessons: [],
           aiTip: AI_TIPS.firstDay,
+          showBankModal: false,
         });
       },
 

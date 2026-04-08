@@ -1,15 +1,17 @@
 "use client";
 
-import React from "react";
 import { useGameStore } from "@/store/gameStore";
 import { Card, ProgressBar } from "@/components/ui";
 import { GAME_CONFIG } from "@/lib/constants";
 
 export function GameStats() {
-  const { player, tree, savings, fixedDeposits, ownedAssets } = useGameStore();
+  const { player, tree, savings, fixedDeposits, sips, ownedAssets } = useGameStore();
 
   // Calculate total FD value
   const totalFDValue = fixedDeposits.reduce((sum, fd) => sum + fd.principal, 0);
+
+  // Calculate total SIP value
+  const totalSIPValue = sips.reduce((sum, sip) => sum + sip.currentValue, 0);
 
   // Calculate total asset value
   const totalAssetValue = ownedAssets.reduce(
@@ -17,9 +19,9 @@ export function GameStats() {
     0,
   );
 
-  // Calculate net worth
+  // Calculate net worth (including SIP)
   const netWorth =
-    player.wallet + savings.balance + totalFDValue + totalAssetValue;
+    player.wallet + savings.balance + totalFDValue + totalSIPValue + totalAssetValue;
 
   return (
     <Card className="bg-gradient-to-br from-emerald-50 to-green-100">
@@ -77,7 +79,7 @@ export function GameStats() {
           <span className="text-sm text-gray-600">Total Net Worth</span>
           <div className="text-xl font-bold text-green-700">₹{netWorth}</div>
           <div className="text-xs text-gray-500 mt-1">
-            Savings: ₹{savings.balance} | FD: ₹{totalFDValue} | Assets: ₹
+            Savings: ₹{savings.balance} | FD: ₹{totalFDValue} | SIP: ₹{totalSIPValue} | Assets: ₹
             {totalAssetValue}
           </div>
         </div>
