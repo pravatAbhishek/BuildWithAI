@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Variants } from "framer-motion";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
 import { calculateTreeYield, canWaterTree } from "@/lib/gameEngine";
+import type { AssetType, MarketAsset } from "@/types/game";
 
 type Phase = "morning" | "evening" | "night" | "sunrise";
+type ShopTab = AssetType;
 
 const treeShakeVariants: Variants = {
   calm: { rotate: 0, scaleY: 1 },
@@ -18,15 +20,18 @@ export function GameCanvas() {
     tree,
     player,
     ownedAssets,
+    marketAssets,
     waterTree,
+    buyAsset,
     saveToBank,
     investMoney,
     startNewDay,
-    resetGame,
     aiTip,
   } = useGameStore();
 
   const [phase, setPhase] = useState<Phase>("morning");
+  const [shopOpen, setShopOpen] = useState(false);
+  const [shopTab, setShopTab] = useState<ShopTab>("depreciating");
   const [shakeTree, setShakeTree] = useState(false);
   const [coinPop, setCoinPop] = useState<number | null>(null);
   const [bankChoice, setBankChoice] = useState(0);
@@ -35,19 +40,6 @@ export function GameCanvas() {
   const wateringsLeft = Math.max(0, 3 - tree.timesWateredToday);
   const canWater = canWaterTree(tree, player.waterUnits) && phase === "morning";
   const remaining = Math.max(0, player.wallet - bankChoice - investChoice);
-
-  useEffect(() => {
-    if (phase === "morning" && tree.timesWateredToday >= 3) {
-      setPhase("evening");
-    }
-  }, [phase, tree.timesWateredToday]);
-
-  useEffect(() => {
-    if (phase !== "evening") {
-      setBankChoice(0);
-      setInvestChoice(0);
-    }
-  }, [phase]);
 
   const bgClass = useMemo(() => {
     if (phase === "morning") return "from-sky-300 via-cyan-200 to-emerald-200";
@@ -65,12 +57,18 @@ export function GameCanvas() {
     setCoinPop(earned);
     window.setTimeout(() => setShakeTree(false), 250);
     window.setTimeout(() => setCoinPop(null), 900);
+
+    if (tree.timesWateredToday + 1 >= 3) {
+      window.setTimeout(() => setPhase("evening"), 550);
+    }
   };
 
   const onConfirmEvening = () => {
     if (bankChoice + investChoice > player.wallet) return;
     if (bankChoice > 0) saveToBank(bankChoice);
     if (investChoice > 0) investMoney(investChoice);
+    setBankChoice(0);
+    setInvestChoice(0);
     setPhase("night");
   };
 
@@ -78,6 +76,7 @@ export function GameCanvas() {
     setPhase("sunrise");
     window.setTimeout(() => {
       startNewDay();
+      setShopOpen(false);
       setPhase("morning");
     }, 950);
   };
@@ -104,6 +103,7 @@ export function GameCanvas() {
       </div>
 
       <SceneTree
+        treeStage={tree.stage}
         shakeTree={shakeTree}
         phase={phase}
         canWater={canWater}
@@ -149,17 +149,29 @@ export function GameCanvas() {
         {phase === "sunrise" && <SunriseOverlay />}
       </AnimatePresence>
 
-      <motion.button
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.92 }}
-        onClick={() => {
-          resetGame();
-          setPhase("morning");
-        }}
-        className="absolute bottom-5 right-5 z-40 rounded-full bg-white/95 px-6 py-4 text-2xl font-extrabold text-emerald-700 shadow-xl"
-      >
-        Reset
-      </motion.button>
+      <AnimatePresence>
+        {phase === "morning" && (
+          <BottomActions
+            canEndDay={tree.timesWateredToday > 0}
+            onShop={() => setShopOpen(true)}
+            onEndDay={() => setPhase("evening")}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {shopOpen && (
+          <ShopModal
+            tab={shopTab}
+            setTab={setShopTab}
+            marketAssets={marketAssets}
+            wallet={player.wallet}
+            ownedAssets={ownedAssets}
+            onBuy={buyAsset}
+            onClose={() => setShopOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -192,16 +204,20 @@ function TopHUD({
 }
 
 function SceneTree({
+  treeStage,
   phase,
   shakeTree,
   canWater,
   onWater,
 }: {
+  treeStage: "seed" | "sprout" | "small" | "medium" | "large" | "full";
   phase: Phase;
   shakeTree: boolean;
   canWater: boolean;
   onWater: () => void;
 }) {
+  const treeEmoji = getTreeEmoji(treeStage);
+
   return (
     <div className="absolute inset-0">
       <div className="absolute bottom-0 left-0 right-0 h-1/3 rounded-t-[40%] bg-gradient-to-b from-emerald-400 to-emerald-600" />
@@ -212,7 +228,7 @@ function SceneTree({
         animate={shakeTree ? "shake" : "calm"}
         transition={{ duration: 0.25 }}
       >
-        🌳
+        {treeEmoji}
       </motion.div>
 
       <AnimatePresence>
@@ -233,6 +249,179 @@ function SceneTree({
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function getTreeEmoji(stage: "seed" | "sprout" | "small" | "medium" | "large" | "full") {
+  if (stage === "seed") return "🫘";
+  if (stage === "sprout") return "🌱";
+  if (stage === "small") return "🪴";
+  if (stage === "medium") return "🌿";
+  return "🌳";
+}
+
+function BottomActions({
+  canEndDay,
+  onShop,
+  onEndDay,
+}: {
+  canEndDay: boolean;
+  onShop: () => void;
+  onEndDay: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ y: 30, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 30, opacity: 0 }}
+      className="absolute bottom-5 left-0 right-0 z-40 px-4"
+    >
+      <div className="mx-auto flex max-w-2xl items-center gap-3">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.92 }}
+          onClick={onShop}
+          className="flex-1 rounded-full bg-gradient-to-br from-purple-500 to-indigo-700 px-6 py-5 text-3xl font-black text-white shadow-xl"
+        >
+          🛒 Shop
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.92 }}
+          onClick={onEndDay}
+          disabled={!canEndDay}
+          className="flex-1 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 px-6 py-5 text-3xl font-black text-white shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          🌙 End Day
+        </motion.button>
+      </div>
+    </motion.div>
+  );
+}
+
+function ShopModal({
+  tab,
+  setTab,
+  marketAssets,
+  wallet,
+  ownedAssets,
+  onBuy,
+  onClose,
+}: {
+  tab: ShopTab;
+  setTab: (tab: ShopTab) => void;
+  marketAssets: MarketAsset[];
+  wallet: number;
+  ownedAssets: { name: string; type: AssetType }[];
+  onBuy: (assetId: string) => void;
+  onClose: () => void;
+}) {
+  const filteredAssets = marketAssets.filter((a) => a.type === tab);
+
+  return (
+    <motion.div
+      className="absolute inset-0 z-50 flex items-end bg-black/40 p-3 md:items-center md:justify-center"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        initial={{ y: 28, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 28, opacity: 0 }}
+        className="w-full max-w-3xl rounded-[2rem] bg-white p-5 shadow-2xl md:p-7"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-4xl font-black text-emerald-800">Asset Shop</h2>
+          <button
+            onClick={onClose}
+            className="rounded-full bg-slate-200 px-4 py-2 text-xl font-black text-slate-700"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mb-4 rounded-2xl bg-yellow-100 p-3 text-center text-3xl font-black text-yellow-800">
+          🪙 ₹{wallet}
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setTab("depreciating")}
+            className={`rounded-2xl px-4 py-4 text-2xl font-black ${
+              tab === "depreciating"
+                ? "bg-red-500 text-white"
+                : "bg-red-100 text-red-800"
+            }`}
+          >
+            ⚡ Depreciating
+          </button>
+          <button
+            onClick={() => setTab("appreciating")}
+            className={`rounded-2xl px-4 py-4 text-2xl font-black ${
+              tab === "appreciating"
+                ? "bg-emerald-600 text-white"
+                : "bg-emerald-100 text-emerald-800"
+            }`}
+          >
+            🌳 Appreciating
+          </button>
+        </div>
+
+        <div
+          className={`mb-4 rounded-2xl p-3 text-center text-xl font-bold ${
+            tab === "depreciating"
+              ? "bg-red-100 text-red-800"
+              : "bg-emerald-100 text-emerald-800"
+          }`}
+        >
+          {tab === "depreciating"
+            ? "Greedy choice: quick boost now, but maintenance and value drop later."
+            : "Patient choice: no instant boost, but better long-term growth."}
+        </div>
+
+        <div className="max-h-[42vh] space-y-3 overflow-y-auto pr-1">
+          {filteredAssets.map((asset) => {
+            const owned = ownedAssets.some(
+              (a) => a.name === asset.name && a.type === asset.type,
+            );
+            const canAfford = wallet >= asset.currentPrice && !owned;
+
+            return (
+              <div
+                key={asset.id}
+                className={`rounded-2xl border-2 p-4 ${
+                  canAfford
+                    ? "border-emerald-300 bg-emerald-50"
+                    : owned
+                      ? "border-slate-300 bg-slate-100"
+                      : "border-red-200 bg-red-50"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-3xl font-black text-slate-800">{asset.name}</div>
+                    <div className="mt-1 text-lg font-semibold text-slate-700">
+                      {asset.description}
+                    </div>
+                  </div>
+                  <div className="text-3xl font-black text-yellow-700">₹{asset.currentPrice}</div>
+                </div>
+                <motion.button
+                  whileHover={{ scale: canAfford ? 1.03 : 1 }}
+                  whileTap={{ scale: canAfford ? 0.95 : 1 }}
+                  disabled={!canAfford}
+                  onClick={() => onBuy(asset.id)}
+                  className="mt-3 w-full rounded-full bg-indigo-600 px-5 py-4 text-2xl font-black text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {owned ? "Owned ✅" : canAfford ? "Buy" : "Not Enough Coins"}
+                </motion.button>
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
