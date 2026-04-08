@@ -1,8 +1,15 @@
 @import "tailwindcss";
-
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Game colors */
+  --sky-day: #87ceeb;
+  --sky-sunset: #ff7f50;
+  --sky-night: #1a1a2e;
+  --grass: #4ade80;
+  --grass-dark: #22c55e;
+  --sun: #ffd700;
+  --moon: #f5f5dc;
 }
 
 @theme inline {
@@ -12,15 +19,484 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Comic Sans MS", "Chalkboard", "Comic Neue", cursive, sans-serif;
+  overflow: hidden;
+}
+
+/* ==================== GAME ANIMATIONS ==================== */
+
+/* Sun/Moon floating animation */
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Tree swaying animation */
+
+@keyframes sway {
+  0%,
+  100% {
+    transform: rotate(-2deg);
+  }
+  50% {
+    transform: rotate(2deg);
+  }
+}
+
+/* Gentle sway for sapling */
+
+@keyframes gentleSway {
+  0%,
+  100% {
+    transform: rotate(-1deg) translateX(0);
+  }
+  50% {
+    transform: rotate(1deg) translateX(2px);
+  }
+}
+
+/* Cloud floating */
+
+@keyframes cloudFloat {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100vw);
+  }
+}
+
+/* Water drop falling */
+
+@keyframes waterDrop {
+  0% {
+    transform: translateY(-20px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100px) scale(0.5);
+    opacity: 0;
+  }
+}
+
+/* Coin popup */
+
+@keyframes coinPop {
+  0% {
+    transform: translateY(0) scale(0);
+    opacity: 0;
+  }
+  20% {
+    transform: translateY(-20px) scale(1.2);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(-60px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-80px) scale(0.8);
+    opacity: 0;
+  }
+}
+
+/* Sparkle effect */
+
+@keyframes sparkle {
+  0%,
+  100% {
+    transform: scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1) rotate(180deg);
+    opacity: 1;
+  }
+}
+
+/* Pulse glow */
+
+@keyframes pulseGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(74, 222, 128, 0.5);
+  }
+  50% {
+    box-shadow:
+      0 0 20px rgba(74, 222, 128, 0.8),
+      0 0 30px rgba(74, 222, 128, 0.4);
+  }
+}
+
+/* Button bounce */
+
+@keyframes bounce {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* Shake animation for tap */
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+/* Growing animation */
+
+@keyframes grow {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Day/Night sky transition */
+
+@keyframes skyTransition {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Stars twinkling */
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Grass wave */
+
+@keyframes grassWave {
+  0%,
+  100% {
+    transform: skewX(-5deg);
+  }
+  50% {
+    transform: skewX(5deg);
+  }
+}
+
+/* Flower bloom */
+
+@keyframes bloom {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1) rotate(5deg);
+  }
+}
+
+/* Bird flying */
+
+@keyframes birdFly {
+  0% {
+    transform: translateX(-50px) translateY(0);
+  }
+  25% {
+    transform: translateX(25vw) translateY(-20px);
+  }
+  50% {
+    transform: translateX(50vw) translateY(0);
+  }
+  75% {
+    transform: translateX(75vw) translateY(-15px);
+  }
+  100% {
+    transform: translateX(110vw) translateY(0);
+  }
+}
+
+/* Butterfly flutter */
+
+@keyframes flutter {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-10px) rotate(10deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(-5deg);
+  }
+  75% {
+    transform: translateY(-15px) rotate(5deg);
+  }
+}
+
+/* Leaf falling */
+
+@keyframes leafFall {
+  0% {
+    transform: translateY(-20px) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* Modal slide up */
+
+@keyframes slideUp {
+  0% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Fade in */
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Level up celebration */
+
+@keyframes levelUp {
+  0% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.3) rotate(-5deg);
+  }
+  50% {
+    transform: scale(1.5) rotate(5deg);
+  }
+  75% {
+    transform: scale(1.3) rotate(-3deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* ==================== UTILITY CLASSES ==================== */
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-sway {
+  animation: sway 4s ease-in-out infinite;
+}
+
+.animate-gentle-sway {
+  animation: gentleSway 3s ease-in-out infinite;
+}
+
+.animate-water-drop {
+  animation: waterDrop 0.8s ease-in forwards;
+}
+
+.animate-coin-pop {
+  animation: coinPop 1.5s ease-out forwards;
+}
+
+.animate-sparkle {
+  animation: sparkle 1s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+.animate-bounce-slow {
+  animation: bounce 2s ease-in-out infinite;
+}
+
+.animate-shake {
+  animation: shake 0.3s ease-in-out;
+}
+
+.animate-grow {
+  animation: grow 0.5s ease-out forwards;
+}
+
+.animate-twinkle {
+  animation: twinkle 2s ease-in-out infinite;
+}
+
+.animate-grass-wave {
+  animation: grassWave 2s ease-in-out infinite;
+}
+
+.animate-bloom {
+  animation: bloom 3s ease-in-out infinite;
+}
+
+.animate-bird-fly {
+  animation: birdFly 15s linear infinite;
+}
+
+.animate-flutter {
+  animation: flutter 2s ease-in-out infinite;
+}
+
+.animate-leaf-fall {
+  animation: leafFall 5s linear infinite;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.5s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-level-up {
+  animation: levelUp 0.8s ease-out forwards;
+}
+
+/* Cloud animation with varying speeds */
+
+.cloud-slow {
+  animation: cloudFloat 40s linear infinite;
+}
+
+.cloud-medium {
+  animation: cloudFloat 30s linear infinite;
+}
+
+.cloud-fast {
+  animation: cloudFloat 20s linear infinite;
+}
+
+/* Delay utilities for staggered animations */
+
+.delay-100 {
+  animation-delay: 0.1s;
+}
+
+.delay-200 {
+  animation-delay: 0.2s;
+}
+
+.delay-300 {
+  animation-delay: 0.3s;
+}
+
+.delay-500 {
+  animation-delay: 0.5s;
+}
+
+.delay-700 {
+  animation-delay: 0.7s;
+}
+
+.delay-1000 {
+  animation-delay: 1s;
+}
+
+/* ==================== GAME UI STYLES ==================== */
+
+.game-button {
+  @apply rounded-full px-6 py-3 font-bold text-white shadow-lg transition-all duration-200;
+  @apply hover: scale-105 active: scale-95;
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+}
+
+.game-button:disabled {
+  @apply opacity-50 cursor-not-allowed hover: scale-100 active: scale-100;
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+}
+
+.game-card {
+  @apply rounded-3xl p-4 shadow-xl backdrop-blur-sm;
+  background: rgba(255, 255, 255, 0.9);
+  border: 3px solid rgba(74, 222, 128, 0.3);
+}
+
+.game-hud-item {
+  @apply flex items-center gap-2 px-4 py-2 rounded-full;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* Gradient text */
+
+.text-gradient {
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 50%, #16a34a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effects */
+
+.glow-green {
+  box-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
+}
+
+.glow-gold {
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+}
+
+.glow-blue {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+@media (max-width: 640px) {
+  .game-button {
+    @apply px-4 py-2 text-sm;
+  }
+  .game-card {
+    @apply p-3 rounded-2xl;
+  }
 }

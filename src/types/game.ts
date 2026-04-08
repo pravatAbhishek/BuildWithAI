@@ -1,5 +1,15 @@
 // Core game types for Growtopia Financial Education Game
 
+export type TimeOfDay = "morning" | "noon" | "evening" | "night";
+export type SaplingStage =
+  | "seed"
+  | "sprout"
+  | "small"
+  | "medium"
+  | "large"
+  | "full";
+export type GameScreen = "play" | "shop" | "end-day" | "bank" | "invest";
+
 export interface Player {
   id: string;
   name: string;
@@ -7,6 +17,8 @@ export interface Player {
   waterUnits: number; // Current water available
   currentDay: number; // Game day (starts at 1)
   totalEarnings: number; // Lifetime earnings for stats
+  bankBalance: number; // Money saved in bank (available next day)
+  investmentBalance: number; // Money invested (grows but locked)
 }
 
 export interface Tree {
@@ -14,6 +26,8 @@ export interface Tree {
   health: number; // 0-100, affects money output
   timesWateredToday: number;
   maxWateringPerDay: number;
+  stage: SaplingStage; // Visual growth stage
+  totalWaterings: number; // Lifetime waterings for growth
 }
 
 export interface SavingsAccount {
@@ -87,11 +101,19 @@ export interface GameState {
   marketAssets: MarketAsset[];
   lessons: DailyLesson[];
 
+  // Visual state
+  timeOfDay: TimeOfDay;
+  currentScreen: GameScreen;
+  showWaterEffect: boolean;
+  showCoinEffect: boolean;
+  lastCoinAmount: number;
+
   // Game flow
   isPlaying: boolean;
   showEndOfDay: boolean;
   showLesson: boolean;
   currentLesson: DailyLesson | null;
+  aiTip: string | null;
 }
 
 export interface GameActions {
@@ -102,8 +124,12 @@ export interface GameActions {
   // Banking actions
   depositToSavings: (amount: number) => void;
   withdrawFromSavings: (amount: number) => void;
-  createFixedDeposit: (amount: number, days: number) => void;
+  createFixedDeposit: (amount: number, days?: number) => void;
   withdrawFixedDeposit: (fdId: string) => void;
+
+  // New money management (end of day)
+  saveToBank: (amount: number) => void;
+  investMoney: (amount: number) => void;
 
   // Asset actions
   buyAsset: (assetId: string) => void;
@@ -112,6 +138,14 @@ export interface GameActions {
   // Day progression
   endDay: () => void;
   startNewDay: () => void;
+
+  // Screen navigation
+  setScreen: (screen: GameScreen) => void;
+
+  // Visual effects
+  triggerWaterEffect: () => void;
+  triggerCoinEffect: (amount: number) => void;
+  setAITip: (tip: string | null) => void;
 
   // Lesson
   dismissLesson: () => void;

@@ -1,7 +1,7 @@
 // Core game engine logic
 
 import { GAME_CONFIG } from "./constants";
-import type { Tree, Player, Asset } from "@/types/game";
+import type { Tree, Player, Asset, SaplingStage } from "@/types/game";
 
 /**
  * Calculate money earned from watering the tree
@@ -59,13 +59,32 @@ export function shouldEndDay(tree: Tree): boolean {
 }
 
 /**
+ * Determine sapling stage based on total waterings
+ */
+export function getSaplingStage(totalWaterings: number): SaplingStage {
+  if (totalWaterings < 3) return "seed";
+  if (totalWaterings < 10) return "sprout";
+  if (totalWaterings < 25) return "small";
+  if (totalWaterings < 50) return "medium";
+  if (totalWaterings < 100) return "large";
+  return "full";
+}
+
+/**
  * Update tree state after watering
  */
 export function updateTreeAfterWatering(tree: Tree): Tree {
+  const newTotalWaterings = tree.totalWaterings + 1;
+  const newStage = getSaplingStage(newTotalWaterings);
+  const levelUp = newStage !== tree.stage;
+
   return {
     ...tree,
     timesWateredToday: tree.timesWateredToday + 1,
     health: Math.min(100, tree.health + GAME_CONFIG.TREE_HEALTH_GAIN),
+    totalWaterings: newTotalWaterings,
+    stage: newStage,
+    level: levelUp ? tree.level + 1 : tree.level,
   };
 }
 
@@ -96,6 +115,8 @@ export function createInitialPlayer(name: string = "Player"): Player {
     waterUnits: GAME_CONFIG.INITIAL_WATER,
     currentDay: 1,
     totalEarnings: 0,
+    bankBalance: 0,
+    investmentBalance: 0,
   };
 }
 
@@ -108,5 +129,7 @@ export function createInitialTree(): Tree {
     health: 100,
     timesWateredToday: 0,
     maxWateringPerDay: GAME_CONFIG.MAX_WATERING_PER_DAY,
+    stage: "seed",
+    totalWaterings: 0,
   };
 }

@@ -7,8 +7,9 @@ import type {
   GameActions,
   DailyLesson,
   MarketAsset,
+  GameScreen,
 } from "@/types/game";
-import { GAME_CONFIG, MARKET_ASSETS } from "./constants";
+import { GAME_CONFIG, MARKET_ASSETS } from "@/lib/constants";
 import {
   calculateTreeYield,
   canWaterTree,
@@ -17,7 +18,7 @@ import {
   createInitialPlayer,
   createInitialTree,
   calculateWaterCost,
-} from "./gameEngine";
+} from "@/lib/gameEngine";
 import {
   createInitialSavings,
   applySavingsInterest,
@@ -26,13 +27,52 @@ import {
   createFixedDeposit as createFD,
   updateFDMaturityStatus,
   withdrawFD,
-} from "./bankingLogic";
+} from "@/lib/bankingLogic";
 import {
   updateAssetValues,
   calculateMaintenanceCosts,
   calculateAssetValue,
   purchaseAsset,
-} from "./assetCalculator";
+} from "@/lib/assetCalculator";
+
+// AI Tips based on player actions
+const AI_TIPS = {
+  lowMoney: "💡 Tip: Try saving some money in the bank for tomorrow!",
+  noWater: "💧 Tip: Buy water from the shop to water your plant!",
+  goodSaver: "🌟 Great job saving! Your money will grow with interest!",
+  investor: "📈 Smart! Investments grow over time but need patience.",
+  wateringDone: "🌙 Great work today! End the day to see what happens next.",
+  firstDay: "👋 Welcome! Tap your plant to water it and earn coins!",
+  bankTip: "🏦 Bank savings are safe and earn small daily interest.",
+  investTip: "🌱 Investments grow faster but you can't use them right away.",
+  shopTip: "🛒 Assets can boost your earnings! Check the shop.",
+  balanced: "⚖️ Great balance of saving and spending! Keep it up!",
+};
+
+function getAITip(state: GameState): string {
+  if (state.player.currentDay === 1 && state.tree.timesWateredToday === 0) {
+    return AI_TIPS.firstDay;
+  }
+  if (state.player.wallet < 20 && state.player.waterUnits === 0) {
+    return AI_TIPS.lowMoney;
+  }
+  if (state.player.waterUnits === 0) {
+    return AI_TIPS.noWater;
+  }
+  if (state.tree.timesWateredToday >= 3) {
+    return AI_TIPS.wateringDone;
+  }
+  if (state.player.bankBalance > 100) {
+    return AI_TIPS.goodSaver;
+  }
+  if (state.player.investmentBalance > 100) {
+    return AI_TIPS.investor;
+  }
+  if (state.ownedAssets.length > 0) {
+    return AI_TIPS.shopTip;
+  }
+  return AI_TIPS.balanced;
+}
 
 const initialState: GameState = {
   player: createInitialPlayer(),
@@ -42,10 +82,16 @@ const initialState: GameState = {
   ownedAssets: [],
   marketAssets: MARKET_ASSETS as MarketAsset[],
   lessons: [],
+  timeOfDay: "morning",
+  currentScreen: "play",
+  showWaterEffect: false,
+  showCoinEffect: false,
+  lastCoinAmount: 0,
   isPlaying: true,
   showEndOfDay: false,
   showLesson: false,
   currentLesson: null,
+  aiTip: AI_TIPS.firstDay,
 };
 
 export const useGameStore = create<GameState & GameActions>()(
@@ -72,7 +118,20 @@ export const useGameStore = create<GameState & GameActions>()(
             waterUnits: state.player.waterUnits - 1,
             totalEarnings: state.player.totalEarnings + earnings,
           },
+          showWaterEffect: true,
+          showCoinEffect: true,
+          lastCoinAmount: earnings,
         });
+
+        // Update AI tip after watering
+        const newState = get();
+        set({ aiTip: getAITip(newState) });
+
+        // Auto-hide effects
+        setTimeout(
+          () => set({ showWaterEffect: false, showCoinEffect: false }),
+          1500,
+        );
       },
 
       // Buy water
@@ -192,7 +251,7 @@ export const useGameStore = create<GameState & GameActions>()(
 
       // End day
       endDay: () => {
-        set({ showEndOfDay: true });
+        set({ showEndOfDay: true, currentScreen: "end-day" });
       },
 
       // Start new day
@@ -214,10 +273,17 @@ export const useGameStore = create<GameState & GameActions>()(
           state.player.currentDay + 1,
         );
 
+        // Investment growth (5% daily)
+        const investmentGrowth = Math.floor(
+          state.player.investmentBalance * 0.05,
+        );
+        // Bank interest (1% daily)
+        const bankInterest = Math.floor(state.player.bankBalance * 0.01);
+
         // Generate lesson placeholder (will be replaced with AI)
         const lesson: DailyLesson = {
           day: state.player.currentDay,
-          title: `Day ${state.player.currentDay} Lesson`,
+          title: `Day ${state.player.currentDay} Complete!`,
           content: `Great job today! You earned money and learned about managing resources.`,
           tip: "Remember: Saving early helps your money grow over time!",
           basedOn: ["daily_summary"],
@@ -231,13 +297,70 @@ export const useGameStore = create<GameState & GameActions>()(
           player: {
             ...state.player,
             currentDay: state.player.currentDay + 1,
-            wallet: Math.max(0, state.player.wallet - maintenanceCost),
+            wallet: state.player.bankBalance + bankInterest, // Bank balance becomes wallet
+            bankBalance: 0, // Reset bank
+            investmentBalance:
+              state.player.investmentBalance + investmentGrowth,
           },
           lessons: [...state.lessons, lesson],
           showEndOfDay: false,
           showLesson: true,
           currentLesson: lesson,
+          currentScreen: "play",
+          timeOfDay: "morning",
         });
+
+        // Update AI tip
+        const newState = get();
+        set({ aiTip: getAITip(newState) });
+      },
+
+      // Screen navigation
+      setScreen: (screen: GameScreen) => {
+        set({ currentScreen: screen });
+      },
+
+      // Save to bank (end of day)
+      saveToBank: (amount: number) => {
+        const state = get();
+        if (amount <= 0 || state.player.wallet < amount) return;
+
+        set({
+          player: {
+            ...state.player,
+            wallet: state.player.wallet - amount,
+            bankBalance: state.player.bankBalance + amount,
+          },
+        });
+      },
+
+      // Invest money (end of day)
+      investMoney: (amount: number) => {
+        const state = get();
+        if (amount <= 0 || state.player.wallet < amount) return;
+
+        set({
+          player: {
+            ...state.player,
+            wallet: state.player.wallet - amount,
+            investmentBalance: state.player.investmentBalance + amount,
+          },
+        });
+      },
+
+      // Visual effects
+      triggerWaterEffect: () => {
+        set({ showWaterEffect: true });
+        setTimeout(() => set({ showWaterEffect: false }), 1500);
+      },
+
+      triggerCoinEffect: (amount: number) => {
+        set({ showCoinEffect: true, lastCoinAmount: amount });
+        setTimeout(() => set({ showCoinEffect: false }), 1500);
+      },
+
+      setAITip: (tip: string | null) => {
+        set({ aiTip: tip });
       },
 
       // Dismiss lesson
@@ -258,6 +381,7 @@ export const useGameStore = create<GameState & GameActions>()(
           fixedDeposits: [],
           ownedAssets: [],
           lessons: [],
+          aiTip: AI_TIPS.firstDay,
         });
       },
 
