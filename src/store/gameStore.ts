@@ -30,7 +30,6 @@ import {
 } from "@/lib/bankingLogic";
 import {
   updateAssetValues,
-  calculateMaintenanceCosts,
   calculateAssetValue,
   purchaseAsset,
 } from "@/lib/assetCalculator";
@@ -268,11 +267,6 @@ export const useGameStore = create<GameState & GameActions>()(
           state.ownedAssets,
           state.player.currentDay + 1,
         );
-        const maintenanceCost = calculateMaintenanceCosts(
-          state.ownedAssets,
-          state.player.currentDay + 1,
-        );
-
         // Investment growth (5% daily)
         const investmentGrowth = Math.floor(
           state.player.investmentBalance * 0.05,

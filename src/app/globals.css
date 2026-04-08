@@ -444,12 +444,12 @@ body {
 
 .game-button {
   @apply rounded-full px-6 py-3 font-bold text-white shadow-lg transition-all duration-200;
-  @apply hover: scale-105 active: scale-95;
+  @apply hover:scale-105 active:scale-95;
   background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
 }
 
 .game-button:disabled {
-  @apply opacity-50 cursor-not-allowed hover: scale-100 active: scale-100;
+  @apply opacity-50 cursor-not-allowed hover:scale-100 active:scale-100;
   background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
 }
 

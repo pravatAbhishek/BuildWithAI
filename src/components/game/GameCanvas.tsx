@@ -1,16 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { Variants } from "framer-motion";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
-import { canWaterTree } from "@/lib/gameEngine";
+import { calculateTreeYield, canWaterTree } from "@/lib/gameEngine";
 
 type Phase = "morning" | "evening" | "night" | "sunrise";
+
+const treeShakeVariants: Variants = {
+  calm: { rotate: 0, scaleY: 1 },
+  shake: { rotate: [0, -3, 3, -2, 2, 0], scaleY: [1, 0.95, 1.05, 1] },
+};
 
 export function GameCanvas() {
   const {
     tree,
     player,
+    ownedAssets,
     waterTree,
     saveToBank,
     investMoney,
@@ -44,7 +51,8 @@ export function GameCanvas() {
 
   const bgClass = useMemo(() => {
     if (phase === "morning") return "from-sky-300 via-cyan-200 to-emerald-200";
-    if (phase === "evening") return "from-orange-300 via-amber-200 to-emerald-200";
+    if (phase === "evening")
+      return "from-orange-300 via-amber-200 to-emerald-200";
     if (phase === "night") return "from-indigo-950 via-blue-900 to-slate-900";
     return "from-yellow-200 via-orange-100 to-sky-300";
   }, [phase]);
@@ -52,15 +60,15 @@ export function GameCanvas() {
   const onWater = () => {
     if (!canWater) return;
     setShakeTree(true);
-    const before = player.wallet;
+    const earned = calculateTreeYield(tree, ownedAssets, player.currentDay);
     waterTree();
-    const earned = Math.max(1, player.wallet - before || 25);
     setCoinPop(earned);
     window.setTimeout(() => setShakeTree(false), 250);
     window.setTimeout(() => setCoinPop(null), 900);
   };
 
   const onConfirmEvening = () => {
+    if (bankChoice + investChoice > player.wallet) return;
     if (bankChoice > 0) saveToBank(bankChoice);
     if (investChoice > 0) investMoney(investChoice);
     setPhase("night");
@@ -132,10 +140,14 @@ export function GameCanvas() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {phase === "night" && <NightLessonBubble tip={aiTip} onContinue={onStartNewDay} />}
+        {phase === "night" && (
+          <NightLessonBubble tip={aiTip} onContinue={onStartNewDay} />
+        )}
       </AnimatePresence>
 
-      <AnimatePresence>{phase === "sunrise" && <SunriseOverlay />}</AnimatePresence>
+      <AnimatePresence>
+        {phase === "sunrise" && <SunriseOverlay />}
+      </AnimatePresence>
 
       <motion.button
         whileHover={{ scale: 1.08 }}
@@ -166,10 +178,14 @@ function TopHUD({
   return (
     <div className="absolute left-0 right-0 top-0 z-30 p-4">
       <div className="mx-auto flex max-w-3xl items-center justify-between rounded-[2rem] bg-white/90 px-5 py-4 shadow-xl">
-        <div className="text-2xl font-extrabold text-emerald-800">Day {day}</div>
+        <div className="text-2xl font-extrabold text-emerald-800">
+          Day {day}
+        </div>
         <div className="text-3xl font-black text-yellow-600">🪙 ₹{wallet}</div>
         <div className="text-2xl font-extrabold text-sky-700">💧 {water}</div>
-        <div className="text-xl font-bold text-indigo-700">Left: {wateringsLeft}</div>
+        <div className="text-xl font-bold text-indigo-700">
+          Left: {wateringsLeft}
+        </div>
       </div>
     </div>
   );
@@ -192,7 +208,8 @@ function SceneTree({
 
       <motion.div
         className="absolute bottom-[26%] left-1/2 z-20 -translate-x-1/2 text-[11rem] md:text-[13rem]"
-        animate={shakeTree ? { rotate: [0, -3, 3, -2, 2, 0], scaleY: [1, 0.95, 1.05, 1] } : { rotate: 0, scaleY: 1 }}
+        variants={treeShakeVariants}
+        animate={shakeTree ? "shake" : "calm"}
         transition={{ duration: 0.25 }}
       >
         🌳
@@ -252,7 +269,9 @@ function EveningChoiceModal({
         animate={{ y: 0, scale: 1 }}
         exit={{ y: 24, opacity: 0 }}
       >
-        <h2 className="text-center text-4xl font-black text-emerald-800">Evening Choice</h2>
+        <h2 className="text-center text-4xl font-black text-emerald-800">
+          Evening Choice
+        </h2>
         <p className="mt-2 text-center text-2xl font-bold text-slate-700">
           Pick how to grow your coins before bedtime.
         </p>
@@ -260,8 +279,12 @@ function EveningChoiceModal({
         <div className="mt-6 grid gap-5 md:grid-cols-2">
           <div className="rounded-3xl bg-sky-100 p-5">
             <div className="text-6xl">🔐</div>
-            <div className="mt-2 text-3xl font-black text-sky-800">Safe Box</div>
-            <div className="text-xl font-bold text-sky-700">Secure + smaller growth</div>
+            <div className="mt-2 text-3xl font-black text-sky-800">
+              Safe Box
+            </div>
+            <div className="text-xl font-bold text-sky-700">
+              Secure + smaller growth
+            </div>
             <input
               type="range"
               min={0}
@@ -270,13 +293,19 @@ function EveningChoiceModal({
               onChange={(e) => setBankChoice(Number(e.target.value))}
               className="mt-4 w-full"
             />
-            <div className="mt-2 text-3xl font-black text-sky-900">₹{bankChoice}</div>
+            <div className="mt-2 text-3xl font-black text-sky-900">
+              ₹{bankChoice}
+            </div>
           </div>
 
           <div className="rounded-3xl bg-emerald-100 p-5">
             <div className="text-6xl">🪴</div>
-            <div className="mt-2 text-3xl font-black text-emerald-800">Garden Plot</div>
-            <div className="text-xl font-bold text-emerald-700">Riskier + faster growth</div>
+            <div className="mt-2 text-3xl font-black text-emerald-800">
+              Garden Plot
+            </div>
+            <div className="text-xl font-bold text-emerald-700">
+              Riskier + faster growth
+            </div>
             <input
               type="range"
               min={0}
@@ -285,7 +314,9 @@ function EveningChoiceModal({
               onChange={(e) => setInvestChoice(Number(e.target.value))}
               className="mt-4 w-full"
             />
-            <div className="mt-2 text-3xl font-black text-emerald-900">₹{investChoice}</div>
+            <div className="mt-2 text-3xl font-black text-emerald-900">
+              ₹{investChoice}
+            </div>
           </div>
         </div>
 
