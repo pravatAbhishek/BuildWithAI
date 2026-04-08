@@ -335,7 +335,7 @@ export function FixedDeposit() {
                 {/* Interval Selection */}
                 <div>
                   <label className="block text-sm text-gray-600 mb-2">Investment Frequency</label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {GAME_CONFIG.SIP_INTERVALS.map(opt => (
                       <motion.button
                         key={opt.days}

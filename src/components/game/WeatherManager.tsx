@@ -7,41 +7,61 @@ const WEATHER_TIPS = {
   rain: {
     title: "💧 Rainy Season!",
     message:
-      "During rainfall, trees need less watering. This is a great time to save water and money for future droughts!",
+      "Rain is a reward for strong savings habits. You get a 1% earning bonus on each watering today.",
     lessonKey: "rain-conservation",
   },
   drought: {
     title: "🏜️ Drought Warning!",
     message:
-      "During drought, your earnings are reduced. Good thing you've been saving money! This is why emergency funds matter.",
+      "Drought is unavoidable and cuts earnings by 25%. It cannot be removed with money, so planning ahead is key.",
     lessonKey: "drought-resilience",
   },
   storm: {
     title: "⛈️ Storm Alert!",
     message:
-      'Storms can damage your earnings. Having an investing account helps your wealth grow through long-term saving!',
+      "Storm now triggers an emergency expense. If cash is low, savings are used automatically.",
     lessonKey: "storm-protection",
   },
 };
 
 export const WeatherManager = () => {
-  const { currentWeather, player, triggerWeatherEvent } = useGameStore();
+  const { player, savings, ownedAssets, triggerWeatherEvent } = useGameStore();
   const triggeredDayRef = useRef<number>(0);
 
   useEffect(() => {
-    if (currentWeather !== "none") return;
     if (triggeredDayRef.current === player.currentDay) return;
 
     triggeredDayRef.current = player.currentDay;
-    const shouldTriggerWeather = Math.random() < 0.3;
-    if (!shouldTriggerWeather) return;
+    if (player.currentDay <= 1) {
+      triggerWeatherEvent("none");
+      return;
+    }
 
-    const weatherEvents = ["rain", "drought", "storm"] as const;
-    const randomWeather =
-      weatherEvents[Math.floor(Math.random() * weatherEvents.length)];
+    // Drought is an unavoidable learning event.
+    if (player.currentDay % 6 === 0) {
+      triggerWeatherEvent("drought");
+      return;
+    }
 
-    triggerWeatherEvent(randomWeather);
-  }, [currentWeather, player.currentDay, triggerWeatherEvent]);
+    const hasStormRiskAsset = ownedAssets.some((asset) => {
+      if (!asset.stormChanceBoost || !asset.stormTriggerDay) return false;
+      return player.currentDay - asset.purchaseDay >= asset.stormTriggerDay;
+    });
+
+    const stormChance = hasStormRiskAsset ? 0.45 : 0.12;
+    if (Math.random() < stormChance) {
+      triggerWeatherEvent("storm");
+      return;
+    }
+
+    // Rain is a reward event for strong savers.
+    if (savings.balance >= 800 && Math.random() < 0.55) {
+      triggerWeatherEvent("rain");
+      return;
+    }
+
+    triggerWeatherEvent("none");
+  }, [ownedAssets, player.currentDay, savings.balance, triggerWeatherEvent]);
 
   return null;
 };

@@ -2,6 +2,14 @@
 
 import type { Asset, MarketAsset } from "@/types/game";
 
+export interface MaintenanceBreakdown {
+  assetId: string;
+  assetName: string;
+  cost: number;
+  daysPastGrace: number;
+  note: string;
+}
+
 /**
  * Calculate current value of an appreciating asset
  * Now uses interval-based appreciation instead of daily
@@ -110,8 +118,53 @@ export function updateAssetValues(
  * Calculate car maintenance cost (exponential growth)
  */
 export function calculateCarMaintenanceCost(asset: Asset): number {
-  if (!asset.maintenanceBaseCost || !asset.maintenanceCount) return 0;
+  if (!asset.maintenanceBaseCost || asset.maintenanceCount === undefined) return 0;
   return Math.floor(asset.maintenanceBaseCost * Math.pow(2, asset.maintenanceCount));
+}
+
+/**
+ * Daily maintenance breakdown for depreciating assets.
+ * Costs scale exponentially after each asset's grace period.
+ */
+export function calculateDailyMaintenanceBreakdown(
+  assets: Asset[],
+  currentDay: number,
+): MaintenanceBreakdown[] {
+  const breakdown: MaintenanceBreakdown[] = [];
+
+  for (const asset of assets) {
+    if (asset.type !== "depreciating") continue;
+
+    const daysOwned = currentDay - asset.purchaseDay;
+    const graceDays = asset.boostDuration || 0;
+    if (daysOwned <= graceDays) continue;
+
+    const daysPastGrace = daysOwned - graceDays;
+    const baseCost = asset.maintenanceCost || asset.maintenanceBaseCost || 25;
+
+    const growthFactor =
+      asset.name.includes("Car")
+        ? 1.22
+        : asset.name.includes("Smartphone")
+          ? 1.28
+          : 1.18;
+
+    const cost = Math.floor(baseCost * Math.pow(growthFactor, daysPastGrace - 1));
+    if (cost <= 0) continue;
+
+    breakdown.push({
+      assetId: asset.id,
+      assetName: asset.name,
+      cost,
+      daysPastGrace,
+      note:
+        daysPastGrace <= 3
+          ? "Maintenance has started"
+          : "Maintenance is growing exponentially",
+    });
+  }
+
+  return breakdown;
 }
 
 /**
@@ -156,21 +209,10 @@ export function calculateMaintenanceCosts(
   assets: Asset[],
   currentDay: number,
 ): number {
-  let totalCost = 0;
-
-  for (const asset of assets) {
-    if (asset.type === "depreciating" && asset.maintenanceCost) {
-      const daysSincePurchase = currentDay - asset.purchaseDay;
-      const boostDuration = asset.boostDuration || 0;
-
-      // Simple daily maintenance after boost (for bicycle etc)
-      if (daysSincePurchase > boostDuration && !asset.maintenanceInterval) {
-        totalCost += asset.maintenanceCost;
-      }
-    }
-  }
-
-  return totalCost;
+  return calculateDailyMaintenanceBreakdown(assets, currentDay).reduce(
+    (sum, item) => sum + item.cost,
+    0,
+  );
 }
 
 /**

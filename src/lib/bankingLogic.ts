@@ -68,7 +68,7 @@ export function withdrawFromSavings(
  * Get FD options with rates
  */
 export function getFDOptions(): Array<{ days: number; rate: number; label: string }> {
-  return GAME_CONFIG.FD_OPTIONS;
+  return GAME_CONFIG.FD_OPTIONS.map((option) => ({ ...option }));
 }
 
 /**
@@ -267,5 +267,5 @@ export function cancelSIP(sip: SIP): { sip: SIP; returnAmount: number } {
  * Get SIP interval options
  */
 export function getSIPIntervalOptions(): Array<{ days: number; label: string }> {
-  return GAME_CONFIG.SIP_INTERVALS;
+  return GAME_CONFIG.SIP_INTERVALS.map((option) => ({ ...option }));
 }

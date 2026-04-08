@@ -11,7 +11,6 @@ export function EndDayScreen() {
     saveToBank,
     investMoney,
     startNewDay,
-    setScreen,
     dayStartTotalEarnings,
   } = useGameStore();
 
@@ -62,11 +61,11 @@ export function EndDayScreen() {
             key={i}
             className="absolute animate-twinkle rounded-full bg-white"
             style={{
-              width: Math.random() * 3 + 1 + "px",
-              height: Math.random() * 3 + 1 + "px",
-              top: Math.random() * 60 + "%",
-              left: Math.random() * 100 + "%",
-              animationDelay: Math.random() * 2 + "s",
+              width: `${1 + (i % 3)}px`,
+              height: `${1 + ((i + 1) % 3)}px`,
+              top: `${(i * 17) % 60}%`,
+              left: `${(i * 13) % 100}%`,
+              animationDelay: `${(i % 8) * 0.25}s`,
             }}
           />
         ))}

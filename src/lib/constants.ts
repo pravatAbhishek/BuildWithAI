@@ -8,7 +8,7 @@ export const GAME_CONFIG = {
   // Water mechanics - updated pricing
   WATER_COST_SINGLE: 100, // Cost for 1 water drop
   WATER_COST_5: 450, // Cost for 5 water drops (10% discount)
-  WATER_COST_10: 900, // Cost for 10 water drops (10% discount)
+  WATER_COST_10: 850, // Standard cost for 10 water drops
 
   // Tree mechanics
   BASE_TREE_YIELD: 120, // ₹120 per watering (per drop)
@@ -32,9 +32,8 @@ export const GAME_CONFIG = {
   // Banking - SIP (Systematic Investment Plan)
   SIP_MIN_AMOUNT: 50,
   SIP_INTERVALS: [
-    { days: 1, label: "Daily" },
-    { days: 3, label: "Every 3 Days" },
-    { days: 7, label: "Weekly" },
+    { days: 30, label: "1 Month (30 days)" },
+    { days: 60, label: "2 Months (60 days)" },
   ],
   SIP_GROWTH_RATE: 0.02, // 2% growth per interval
 
@@ -42,10 +41,10 @@ export const GAME_CONFIG = {
   WATERING_SESSIONS_PER_DAY: 3, // After this many waterings, day can end
 
   // Weather Events
-  WEATHER_RAIN_BONUS: 0.2, // 20% water bonus during rain
-  WEATHER_DROUGHT_PENALTY: 0.5, // 50% earnings penalty during drought
+  WEATHER_RAIN_BONUS: 0.01, // 1% earnings bonus during rain
+  WEATHER_DROUGHT_PENALTY: 0.25, // 25% earnings penalty during drought
   WEATHER_STORM_PENALTY: 0.3, // 30% earnings penalty during storm
-  WEATHER_EVENT_DURATION: 5, // Days a weather event lasts
+  WEATHER_EVENT_DURATION: 1, // Weather events last for the current day
   WEATHER_RAIN_CLEAR_COST: 50,
   WEATHER_DROUGHT_CLEAR_COST: 100,
   WEATHER_STORM_CLEAR_COST: 150,
@@ -64,13 +63,13 @@ export const MARKET_ASSETS = [
     id: "smartphone",
     name: "📱 Smartphone",
     type: "depreciating" as const,
-    description: "High earnings for 2 days, but increases storm risk after! Maintenance: ₹400",
+    description: "High earnings for 2 days, then repairs and maintenance rise quickly.",
     basePrice: 1000,
     currentPrice: 1000,
     boostMultiplier: 4.0, // 300% more = 4x income
     boostDuration: 2, // For 2 days only
     depreciationRate: 0.15, // Loses 15% value daily after boost
-    maintenanceCost: 400, // Storm repair cost
+    maintenanceCost: 120, // Base daily maintenance after boost
     stormChanceBoost: 0.35, // +35% storm chance after 3-4 days until storm
     stormTriggerDay: 3, // Days after purchase when storm chance increases
   },
@@ -78,15 +77,15 @@ export const MARKET_ASSETS = [
     id: "car",
     name: "🚗 Car",
     type: "depreciating" as const,
-    description: "Water costs ₹10-15 less each! Maintenance every 15 days increases exponentially.",
+    description: "Water costs less, but maintenance starts after day 15 and rises fast.",
     basePrice: 2000,
     currentPrice: 2000,
     waterCostReduction: 12, // Reduces water cost by ₹12 each
     boostMultiplier: 1.0, // No direct income boost
-    boostDuration: 999, // Permanent effect
+    boostDuration: 15, // Grace period before daily maintenance starts
     depreciationRate: 0.05, // Loses 5% value daily
     maintenanceInterval: 15, // Every 15 days
-    maintenanceBaseCost: 2, // Starts at ₹2, doubles each time
+    maintenanceBaseCost: 60, // Base maintenance before exponential increase
   },
   {
     id: "bicycle",

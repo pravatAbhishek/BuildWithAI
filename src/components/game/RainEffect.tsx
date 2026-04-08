@@ -8,21 +8,14 @@ interface RainEffectProps {
   isActive: boolean;
 }
 
-interface Raindrop {
-  id: number;
-  left: number;
-  delay: number;
-  duration: number;
-}
-
 export const RainEffect = ({ intensity, isActive }: RainEffectProps) => {
   const raindrops = useMemo(() => {
     const count = Math.floor((intensity / 100) * 50); // Up to 50 drops
     return Array.from({ length: count }, (_, i) => ({
       id: i,
-      left: Math.random() * 100,
-      delay: Math.random() * 0.5,
-      duration: 0.8 + Math.random() * 0.4,
+      left: (i * 11.7) % 100,
+      delay: (i % 12) * 0.04,
+      duration: 0.8 + ((i * 7) % 8) * 0.05,
     }));
   }, [intensity]);
 

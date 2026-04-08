@@ -274,7 +274,7 @@ function WaterDrops() {
           key={i}
           className="absolute animate-water-drop"
           style={{
-            left: 30 + Math.random() * 40 + "%",
+            left: `${30 + (i * 5) % 40}%`,
             top: "-20px",
             animationDelay: i * 0.1 + "s",
           }}
@@ -319,8 +319,8 @@ function Sparkles({ stage }: { stage: SaplingStage }) {
           key={i}
           className="absolute animate-sparkle"
           style={{
-            left: 20 + Math.random() * 60 + "%",
-            top: Math.random() * 60 + "%",
+            left: `${20 + (i * 17) % 60}%`,
+            top: `${10 + (i * 23) % 60}%`,
             animationDelay: i * 0.3 + "s",
           }}
         >

@@ -175,8 +175,8 @@ export function applyWeatherModifier(
 ): number {
   switch (weatherType) {
     case "rain":
-      // Rain actually helps - bonus to water efficiency (no money bonus)
-      return earnings;
+      // Rain is a good event and adds a small per-watering bonus.
+      return Math.floor(earnings * (1 + GAME_CONFIG.WEATHER_RAIN_BONUS));
     case "drought":
       // Drought reduces earnings
       return Math.floor(

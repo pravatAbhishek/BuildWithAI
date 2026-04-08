@@ -34,7 +34,7 @@ export function Ground() {
               key={i}
               style={{
                 animationDelay: `${i * 0.1}s`,
-                height: 15 + Math.random() * 15 + "px",
+                height: `${15 + (i % 6) * 2.5}px`,
               }}
             />
           ))}
@@ -70,10 +70,10 @@ export function Ground() {
             key={i}
             className="absolute rounded-full"
             style={{
-              width: 5 + Math.random() * 10 + "px",
-              height: 5 + Math.random() * 8 + "px",
-              left: 10 + i * 12 + "%",
-              top: Math.random() * 50 + "%",
+              width: `${5 + (i % 4) * 2.5}px`,
+              height: `${5 + ((i + 1) % 4) * 2}px`,
+              left: `${10 + i * 12}%`,
+              top: `${(i * 9) % 50}%`,
               background: `linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)`,
             }}
           />

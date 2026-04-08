@@ -10,6 +10,7 @@ export type SaplingStage =
   | "full";
 export type GameScreen = "play" | "shop" | "end-day" | "bank" | "invest";
 export type WeatherEvent = "none" | "rain" | "drought" | "storm";
+export type EventOutcomeQuality = "weak" | "balanced" | "strong" | "neutral";
 
 export interface Player {
   id: string;
@@ -128,6 +129,48 @@ export interface DailyLesson {
   improvements?: string[]; // What could be better
 }
 
+export interface SuddenEventOption {
+  id: string;
+  label: string;
+  walletDelta: number;
+  savingsDelta?: number;
+  investmentDelta?: number;
+  treeHealthDelta?: number;
+  quality: EventOutcomeQuality;
+  resultText: string;
+}
+
+export interface SuddenEvent {
+  id: string;
+  title: string;
+  scenario: string;
+  options: SuddenEventOption[];
+}
+
+export interface EventResolutionLog {
+  day: number;
+  eventTitle: string;
+  optionLabel: string;
+  quality: EventOutcomeQuality;
+  resultText: string;
+}
+
+export interface MaintenanceCharge {
+  assetId: string;
+  assetName: string;
+  cost: number;
+  note: string;
+}
+
+export interface StormEmergency {
+  title: string;
+  description: string;
+  cost: number;
+  fromWallet: number;
+  fromSavings: number;
+  deficit: number;
+}
+
 export interface GameState {
   player: Player;
   tree: Tree;
@@ -146,10 +189,21 @@ export interface GameState {
   lastCoinAmount: number;
   currentWeather: WeatherEvent;
   weatherIntensity: number;
+  activeStormEmergency: StormEmergency | null;
+  showStormEmergency: boolean;
   dayStartTotalEarnings: number;
   todayInvested: number;
   todayBankSaved: number;
   todaySavingsDeposited: number;
+  activeSuddenEvent: SuddenEvent | null;
+  showSuddenEvent: boolean;
+  lastSuddenEventDay: number;
+  eventHistory: EventResolutionLog[];
+  latestEventResolution: EventResolutionLog | null;
+  maintenanceChargesToday: MaintenanceCharge[];
+  showMaintenancePopup: boolean;
+  isGameOver: boolean;
+  gameOverReason: string | null;
 
   // Storm chance modifier (from smartphone)
   stormChanceModifier: number;
@@ -206,6 +260,9 @@ export interface GameActions {
 
   // Lesson
   dismissLesson: () => void;
+  dismissMaintenancePopup: () => void;
+  dismissStormEmergency: () => void;
+  resolveSuddenEvent: (optionId: string) => void;
 
   // Game management
   resetGame: () => void;

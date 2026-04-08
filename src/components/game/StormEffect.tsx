@@ -82,7 +82,7 @@ export const StormEffect = ({ intensity, isActive }: StormEffectProps) => {
                 initial={{ y: -50, rotate: 0 }}
                 animate={{
                   y: "100vh",
-                  rotate: 360 + Math.random() * 360,
+                  rotate: 360 + i * 120,
                 }}
                 transition={{
                   duration: 3 + i,

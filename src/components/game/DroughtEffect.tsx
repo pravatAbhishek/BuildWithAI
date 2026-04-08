@@ -8,8 +8,6 @@ interface DroughtEffectProps {
 }
 
 export const DroughtEffect = ({ intensity, isActive }: DroughtEffectProps) => {
-  const desaturation = (intensity / 100) * 70; // Up to 70% desaturation
-
   return (
     <AnimatePresence>
       {isActive && (
@@ -25,28 +23,36 @@ export const DroughtEffect = ({ intensity, isActive }: DroughtEffectProps) => {
 
           {/* Dust/sand particles floating */}
           <div className="fixed inset-0 pointer-events-none z-20 overflow-hidden">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <motion.div
-                key={`dust-${i}`}
-                initial={{
-                  y: Math.random() > 0.5 ? -20 : window.innerHeight,
-                  x: Math.random() * 100 + "%",
-                  opacity: 0,
-                }}
-                animate={{
-                  y: Math.random() > 0.5 ? window.innerHeight : -20,
-                  x: `calc(${Math.random() * 100}% + ${Math.sin(i) * 50}px)`,
-                  opacity: [0, 0.4, 0],
-                }}
-                transition={{
-                  duration: 4 + Math.random() * 3,
-                  repeat: Infinity,
-                  ease: "linear",
-                  delay: Math.random() * 2,
-                }}
-                className="absolute w-2 h-2 bg-amber-700 rounded-full"
-              />
-            ))}
+            {Array.from({ length: 12 }).map((_, i) => {
+              const startFromTop = i % 2 === 0;
+              const startY = startFromTop ? "-10%" : "110%";
+              const endY = startFromTop ? "110%" : "-10%";
+              const startX = `${(i * 13) % 100}%`;
+              const drift = (i % 4 - 1.5) * 18;
+
+              return (
+                <motion.div
+                  key={`dust-${i}`}
+                  initial={{
+                    y: startY,
+                    x: startX,
+                    opacity: 0,
+                  }}
+                  animate={{
+                    y: endY,
+                    x: `calc(${startX} + ${drift}px)`,
+                    opacity: [0, 0.4, 0],
+                  }}
+                  transition={{
+                    duration: 4 + (i % 5) * 0.5,
+                    repeat: Infinity,
+                    ease: "linear",
+                    delay: (i % 6) * 0.3,
+                  }}
+                  className="absolute w-2 h-2 bg-amber-700 rounded-full"
+                />
+              );
+            })}
           </div>
 
           {/* Cracked soil pattern */}

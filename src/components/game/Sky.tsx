@@ -125,11 +125,11 @@ export function Sky() {
               key={i}
               className="absolute animate-twinkle rounded-full bg-white"
               style={{
-                width: Math.random() * 3 + 1 + "px",
-                height: Math.random() * 3 + 1 + "px",
-                top: Math.random() * 40 + "%",
-                left: Math.random() * 100 + "%",
-                animationDelay: Math.random() * 2 + "s",
+                width: `${1 + (i % 3)}px`,
+                height: `${1 + ((i + 1) % 3)}px`,
+                top: `${(i * 11) % 40}%`,
+                left: `${(i * 17) % 100}%`,
+                animationDelay: `${(i % 8) * 0.25}s`,
               }}
             />
           ))}

@@ -4,12 +4,18 @@ import { useMemo, useState } from "react";
 import type { Variants } from "framer-motion";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
-import { calculateTreeYield, canWaterTree, getWaterBundleOptions } from "@/lib/gameEngine";
+import {
+  applyWeatherModifier,
+  calculateTreeYield,
+  canWaterTree,
+  getWaterBundleOptions,
+} from "@/lib/gameEngine";
+import { calculateAssetValue } from "@/lib/assetCalculator";
 import { BankPanel } from "@/components/banking";
 import { WeatherManager } from "./WeatherManager";
 import { WeatherOverlay } from "./WeatherOverlay";
 import { DailyLesson } from "@/components/lesson";
-import type { AssetType, MarketAsset } from "@/types/game";
+import type { AssetType, MarketAsset, Asset, SuddenEvent } from "@/types/game";
 
 type Phase = "morning" | "evening" | "night" | "sunrise";
 type ShopTab = AssetType | "water";
@@ -20,7 +26,15 @@ const treeShakeVariants: Variants = {
 };
 
 // Sparkle particle component
-function Sparkle({ delay = 0 }: { delay?: number }) {
+function Sparkle({
+  delay = 0,
+  offsetX,
+  offsetY,
+}: {
+  delay?: number;
+  offsetX: number;
+  offsetY: number;
+}) {
   return (
     <motion.div
       className="absolute w-2 h-2 bg-yellow-300 rounded-full"
@@ -28,8 +42,8 @@ function Sparkle({ delay = 0 }: { delay?: number }) {
       animate={{
         scale: [0, 1, 0],
         opacity: [0, 1, 0],
-        x: [0, (Math.random() - 0.5) * 60],
-        y: [0, (Math.random() - 0.5) * 60],
+        x: [0, offsetX],
+        y: [0, offsetY],
       }}
       transition={{ duration: 0.8, delay, ease: "easeOut" }}
       style={{
@@ -46,27 +60,43 @@ export function GameCanvas() {
     ownedAssets,
     marketAssets,
     savings,
+    currentWeather,
+    fixedDeposits,
+    sips,
     waterTree,
     buyWater,
     buyAsset,
+    sellAsset,
     startNewDay,
     resetGame,
     aiTip,
     showBankModal,
     toggleBankModal,
-    depositToSavings,
-    withdrawFromSavings,
+    activeSuddenEvent,
+    showSuddenEvent,
+    resolveSuddenEvent,
+    maintenanceChargesToday,
+    showMaintenancePopup,
+    dismissMaintenancePopup,
+    isGameOver,
+    gameOverReason,
   } = useGameStore();
 
   const [phase, setPhase] = useState<Phase>("morning");
   const [shopOpen, setShopOpen] = useState(false);
   const [shopTab, setShopTab] = useState<ShopTab>("water");
+  const [missionsOpen, setMissionsOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
   const [shakeTree, setShakeTree] = useState(false);
   const [coinPop, setCoinPop] = useState<number | null>(null);
   const [showSparkles, setShowSparkles] = useState(false);
 
   const wateringsLeft = Math.max(0, 3 - tree.timesWateredToday);
-  const canWater = canWaterTree(tree, player.waterUnits) && phase === "morning";
+  const canWater =
+    canWaterTree(tree, player.waterUnits) &&
+    phase === "morning" &&
+    !showSuddenEvent &&
+    !isGameOver;
 
   const bgClass = useMemo(() => {
     if (phase === "morning") return "from-sky-400 via-cyan-300 to-emerald-300";
@@ -75,11 +105,74 @@ export function GameCanvas() {
     return "from-yellow-300 via-orange-200 to-pink-200";
   }, [phase]);
 
+  const inventoryValue = useMemo(
+    () =>
+      ownedAssets.reduce(
+        (sum, asset) => sum + calculateAssetValue(asset, player.currentDay),
+        0,
+      ),
+    [ownedAssets, player.currentDay],
+  );
+
+  const netWorth = player.wallet + savings.balance + inventoryValue;
+
+  const missions = useMemo(
+    () => [
+      {
+        id: "emergency-fund",
+        title: "Emergency Fund Builder",
+        description: "Keep ₹500 in savings.",
+        progress: Math.min(savings.balance, 500),
+        target: 500,
+        unit: "₹",
+      },
+      {
+        id: "first-fd",
+        title: "Start a Fixed Deposit",
+        description: "Create at least one FD.",
+        progress: Math.min(fixedDeposits.length, 1),
+        target: 1,
+        unit: "",
+      },
+      {
+        id: "first-sip",
+        title: "Monthly SIP Discipline",
+        description: "Start a SIP for 1 or 2 months.",
+        progress: Math.min(sips.length, 1),
+        target: 1,
+        unit: "",
+      },
+      {
+        id: "long-term-investor",
+        title: "Own a Growing Asset",
+        description: "Buy at least one appreciating asset.",
+        progress: Math.min(
+          ownedAssets.filter((asset) => asset.type === "appreciating").length,
+          1,
+        ),
+        target: 1,
+        unit: "",
+      },
+      {
+        id: "net-worth",
+        title: "Net Worth ₹2000",
+        description: "Reach ₹2000 across wallet, savings, and assets.",
+        progress: Math.min(Math.max(netWorth, 0), 2000),
+        target: 2000,
+        unit: "₹",
+      },
+    ],
+    [fixedDeposits.length, netWorth, ownedAssets, savings.balance, sips.length],
+  );
+
   const onWater = () => {
     if (!canWater) return;
     setShakeTree(true);
     setShowSparkles(true);
-    const earned = calculateTreeYield(tree, ownedAssets, player.currentDay);
+    const earned = applyWeatherModifier(
+      calculateTreeYield(tree, ownedAssets, player.currentDay),
+      currentWeather,
+    );
     waterTree();
     setCoinPop(earned);
     window.setTimeout(() => setShakeTree(false), 300);
@@ -100,6 +193,8 @@ export function GameCanvas() {
     window.setTimeout(() => {
       startNewDay();
       setShopOpen(false);
+      setMissionsOpen(false);
+      setInventoryOpen(false);
       setPhase("morning");
     }, 1200);
   };
@@ -139,7 +234,6 @@ export function GameCanvas() {
           phase={phase}
           canWater={canWater}
           onWater={onWater}
-          showSparkles={showSparkles}
         />
 
         {/* Enhanced Coin Pop Animation */}
@@ -153,7 +247,12 @@ export function GameCanvas() {
               {showSparkles && (
                 <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
                   {[...Array(8)].map((_, i) => (
-                    <Sparkle key={i} delay={i * 0.05} />
+                    <Sparkle
+                      key={i}
+                      delay={i * 0.05}
+                      offsetX={Math.cos((i / 8) * Math.PI * 2) * 32}
+                      offsetY={Math.sin((i / 8) * Math.PI * 2) * 32}
+                    />
                   ))}
                 </div>
               )}
@@ -203,10 +302,12 @@ export function GameCanvas() {
         <AnimatePresence>
           {phase === "morning" && (
             <BottomActions
-              canEndDay={tree.timesWateredToday > 0}
-              onShop={() => setShopOpen(true)}
-              onEndDay={() => setPhase("evening")}
-              onBank={toggleBankModal}
+              canEndDay={tree.timesWateredToday > 0 && !showSuddenEvent && !isGameOver}
+              onShop={() => !showSuddenEvent && !isGameOver && setShopOpen(true)}
+              onEndDay={() => !showSuddenEvent && !isGameOver && setPhase("evening")}
+              onBank={() => !showSuddenEvent && !isGameOver && toggleBankModal()}
+              onMissions={() => setMissionsOpen(true)}
+              onInventory={() => setInventoryOpen(true)}
             />
           )}
         </AnimatePresence>
@@ -229,8 +330,56 @@ export function GameCanvas() {
 
         {/* Quick Bank Access Modal */}
         <AnimatePresence>
-          {showBankModal && phase === "morning" && (
+          {showBankModal && phase === "morning" && !showSuddenEvent && !isGameOver && (
             <QuickBankModal onClose={toggleBankModal} />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showSuddenEvent && activeSuddenEvent && (
+            <SuddenEventModal
+              event={activeSuddenEvent}
+              onSelect={resolveSuddenEvent}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {missionsOpen && (
+            <MissionsModal
+              missions={missions}
+              onClose={() => setMissionsOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {inventoryOpen && (
+            <InventoryModal
+              assets={ownedAssets}
+              currentDay={player.currentDay}
+              onSell={sellAsset}
+              onClose={() => setInventoryOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showMaintenancePopup && maintenanceChargesToday.length > 0 && (
+            <MaintenancePopup
+              charges={maintenanceChargesToday}
+              onClose={dismissMaintenancePopup}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isGameOver && (
+            <GameOverOverlay
+              reason={gameOverReason}
+              netWorth={netWorth}
+              onRestart={resetGame}
+            />
           )}
         </AnimatePresence>
       </div>
@@ -322,14 +471,12 @@ function SceneTree({
   shakeTree,
   canWater,
   onWater,
-  showSparkles,
 }: {
   treeStage: "seed" | "sprout" | "small" | "medium" | "large" | "full";
   phase: Phase;
   shakeTree: boolean;
   canWater: boolean;
   onWater: () => void;
-  showSparkles: boolean;
 }) {
   const treeEmoji = getTreeEmoji(treeStage);
 
@@ -406,11 +553,15 @@ function BottomActions({
   onShop,
   onEndDay,
   onBank,
+  onMissions,
+  onInventory,
 }: {
   canEndDay: boolean;
   onShop: () => void;
   onEndDay: () => void;
   onBank: () => void;
+  onMissions: () => void;
+  onInventory: () => void;
 }) {
   return (
     <motion.div
@@ -419,46 +570,73 @@ function BottomActions({
       exit={{ y: 50, opacity: 0 }}
       className="absolute bottom-6 left-0 right-0 z-40 px-4"
     >
-      <div className="mx-auto flex max-w-3xl items-center gap-4">
-        {/* Shop Button */}
+      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-3 md:grid-cols-5">
         <motion.button
           whileHover={{ scale: 1.05, y: -3 }}
           whileTap={{ scale: 0.95 }}
           onClick={onShop}
-          className="flex-1 rounded-2xl bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-700 px-6 py-5 text-2xl font-black text-white shadow-xl hover:shadow-purple-500/40 transition-shadow"
+          className="rounded-2xl bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-700 px-4 py-4 text-lg font-black text-white shadow-xl hover:shadow-purple-500/40 transition-shadow"
           style={{
             boxShadow: "0 10px 30px rgba(139, 92, 246, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
           }}
         >
           <span className="flex items-center justify-center gap-3">
-            <span className="text-3xl">🛒</span>
+            <span className="text-2xl">🛒</span>
             <span>Shop</span>
           </span>
         </motion.button>
 
-        {/* Bank Button */}
         <motion.button
           whileHover={{ scale: 1.05, y: -3 }}
           whileTap={{ scale: 0.95 }}
           onClick={onBank}
-          className="flex-1 rounded-2xl bg-gradient-to-br from-green-500 via-emerald-500 to-teal-600 px-6 py-5 text-2xl font-black text-white shadow-xl hover:shadow-green-500/40 transition-shadow"
+          className="rounded-2xl bg-gradient-to-br from-green-500 via-emerald-500 to-teal-600 px-4 py-4 text-lg font-black text-white shadow-xl hover:shadow-green-500/40 transition-shadow"
           style={{
             boxShadow: "0 10px 30px rgba(16, 185, 129, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
           }}
         >
           <span className="flex items-center justify-center gap-3">
-            <span className="text-3xl">🏦</span>
+            <span className="text-2xl">🏦</span>
             <span>Bank</span>
           </span>
         </motion.button>
 
-        {/* End Day Button */}
+        <motion.button
+          whileHover={{ scale: 1.05, y: -3 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={onMissions}
+          className="rounded-2xl bg-gradient-to-br from-cyan-500 via-sky-500 to-blue-600 px-4 py-4 text-lg font-black text-white shadow-xl hover:shadow-sky-500/40 transition-shadow"
+          style={{
+            boxShadow: "0 10px 30px rgba(14, 165, 233, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
+          }}
+        >
+          <span className="flex items-center justify-center gap-3">
+            <span className="text-2xl">🎯</span>
+            <span>Missions</span>
+          </span>
+        </motion.button>
+
+        <motion.button
+          whileHover={{ scale: 1.05, y: -3 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={onInventory}
+          className="rounded-2xl bg-gradient-to-br from-fuchsia-500 via-pink-500 to-rose-600 px-4 py-4 text-lg font-black text-white shadow-xl hover:shadow-pink-500/40 transition-shadow"
+          style={{
+            boxShadow: "0 10px 30px rgba(236, 72, 153, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
+          }}
+        >
+          <span className="flex items-center justify-center gap-3">
+            <span className="text-2xl">🧾</span>
+            <span>Inventory</span>
+          </span>
+        </motion.button>
+
         <motion.button
           whileHover={canEndDay ? { scale: 1.05, y: -3 } : {}}
           whileTap={canEndDay ? { scale: 0.95 } : {}}
           onClick={onEndDay}
           disabled={!canEndDay}
-          className={`flex-1 rounded-2xl px-6 py-5 text-2xl font-black text-white shadow-xl transition-all ${
+          className={`rounded-2xl px-4 py-4 text-lg font-black text-white shadow-xl transition-all ${
             canEndDay 
               ? "bg-gradient-to-br from-amber-400 via-orange-500 to-red-500 hover:shadow-orange-500/40" 
               : "bg-gradient-to-br from-slate-400 to-slate-500 opacity-60 cursor-not-allowed"
@@ -468,7 +646,7 @@ function BottomActions({
           } : {}}
         >
           <span className="flex items-center justify-center gap-3">
-            <span className="text-3xl">🌙</span>
+            <span className="text-2xl">🌙</span>
             <span>End Day</span>
           </span>
         </motion.button>
@@ -1030,6 +1208,310 @@ function QuickBankModal({ onClose }: { onClose: () => void }) {
         >
           {mode === "deposit" ? `⬇️ Deposit ₹${amount}` : `⬆️ Withdraw ₹${amount}`}
         </motion.button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function SuddenEventModal({
+  event,
+  onSelect,
+}: {
+  event: SuddenEvent;
+  onSelect: (optionId: string) => void;
+}) {
+  return (
+    <motion.div
+      className="absolute inset-0 z-[65] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl"
+        initial={{ y: 20, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 20, scale: 0.96 }}
+      >
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Sudden Event</p>
+        <h2 className="mt-2 text-2xl font-black text-slate-900">{event.title}</h2>
+        <p className="mt-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{event.scenario}</p>
+
+        <div className="mt-4 space-y-2">
+          {event.options.map((option) => (
+            <button
+              key={option.id}
+              onClick={() => onSelect(option.id)}
+              className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-indigo-300 hover:bg-indigo-50"
+            >
+              <p className="font-bold text-slate-900">{option.label}</p>
+              <p className="mt-1 text-sm text-slate-600">{option.resultText}</p>
+            </button>
+          ))}
+        </div>
+
+        <p className="mt-4 text-xs text-amber-700">
+          Choose carefully. This decision affects growth, financial stability, and tomorrow&apos;s review.
+        </p>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function MissionsModal({
+  missions,
+  onClose,
+}: {
+  missions: Array<{
+    id: string;
+    title: string;
+    description: string;
+    progress: number;
+    target: number;
+    unit: string;
+  }>;
+  onClose: () => void;
+}) {
+  return (
+    <motion.div
+      className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="w-full max-w-xl rounded-3xl bg-gradient-to-br from-white via-cyan-50 to-sky-50 p-6 shadow-2xl"
+        initial={{ y: 20, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 20, scale: 0.96 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-2xl font-black text-sky-900">🎯 Missions</h3>
+          <button
+            onClick={onClose}
+            className="rounded-full bg-slate-200 px-3 py-1 text-sm font-bold text-slate-600 hover:bg-slate-300"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {missions.map((mission) => {
+            const progressRatio = mission.target === 0 ? 0 : mission.progress / mission.target;
+            const progressPercent = Math.min(100, Math.floor(progressRatio * 100));
+            const completed = progressPercent >= 100;
+
+            return (
+              <div
+                key={mission.id}
+                className={`rounded-2xl border p-4 ${
+                  completed ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-slate-900">{mission.title}</p>
+                    <p className="text-xs text-slate-600">{mission.description}</p>
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700">
+                    {mission.unit}
+                    {Math.floor(mission.progress)} / {mission.unit}
+                    {mission.target}
+                  </p>
+                </div>
+
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className={`h-full rounded-full ${
+                      completed ? "bg-emerald-500" : "bg-sky-500"
+                    }`}
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function InventoryModal({
+  assets,
+  currentDay,
+  onSell,
+  onClose,
+}: {
+  assets: Asset[];
+  currentDay: number;
+  onSell: (assetId: string) => void;
+  onClose: () => void;
+}) {
+  const portfolio = assets.map((asset) => {
+    const sellValue = calculateAssetValue(asset, currentDay);
+    return {
+      ...asset,
+      sellValue,
+      profitLoss: sellValue - asset.purchasePrice,
+    };
+  });
+
+  return (
+    <motion.div
+      className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="w-full max-w-3xl rounded-3xl bg-gradient-to-br from-white via-fuchsia-50 to-rose-50 p-6 shadow-2xl"
+        initial={{ y: 20, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 20, scale: 0.96 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-2xl font-black text-rose-900">🧾 Inventory</h3>
+          <button
+            onClick={onClose}
+            className="rounded-full bg-slate-200 px-3 py-1 text-sm font-bold text-slate-600 hover:bg-slate-300"
+          >
+            Close
+          </button>
+        </div>
+
+        {portfolio.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-600">
+            No assets yet. Buy assets from shop and review sell value here.
+          </div>
+        ) : (
+          <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+            {portfolio.map((asset) => (
+              <div key={asset.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-lg font-black text-slate-900">{asset.name}</p>
+                    <p className="text-xs text-slate-500">Owned since day {asset.purchaseDay}</p>
+                    <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+                      Bought at: ₹{asset.purchasePrice} | Sell now: ₹{asset.sellValue}
+                    </div>
+                    <p
+                      className={`mt-2 text-sm font-semibold ${
+                        asset.profitLoss >= 0 ? "text-emerald-600" : "text-red-600"
+                      }`}
+                    >
+                      {asset.profitLoss >= 0 ? "+" : ""}₹{asset.profitLoss} {asset.profitLoss >= 0 ? "profit" : "loss"}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => onSell(asset.id)}
+                    className="rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 px-5 py-3 text-sm font-bold text-white hover:from-rose-600 hover:to-red-700"
+                  >
+                    Sell for ₹{asset.sellValue}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <p className="mt-4 text-xs text-rose-700">
+          Depreciating assets lose value and their maintenance can rise exponentially. Sell at the right time.
+        </p>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function MaintenancePopup({
+  charges,
+  onClose,
+}: {
+  charges: Array<{ assetId: string; assetName: string; cost: number; note: string }>;
+  onClose: () => void;
+}) {
+  const total = charges.reduce((sum, charge) => sum + charge.cost, 0);
+
+  return (
+    <motion.div
+      className="absolute inset-0 z-[62] flex items-center justify-center bg-black/35 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+        initial={{ y: 20, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 20, scale: 0.96 }}
+      >
+        <h3 className="text-2xl font-black text-slate-900">🧰 Daily Maintenance</h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Your depreciating assets consumed ₹{total} today.
+        </p>
+
+        <div className="mt-4 space-y-2">
+          {charges.map((charge) => (
+            <div
+              key={charge.assetId}
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+            >
+              <p className="font-semibold text-slate-800">{charge.assetName}: ₹{charge.cost}</p>
+              <p className="text-xs text-slate-600">{charge.note}</p>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="mt-5 w-full rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700"
+        >
+          Understood
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function GameOverOverlay({
+  reason,
+  netWorth,
+  onRestart,
+}: {
+  reason: string | null;
+  netWorth: number;
+  onRestart: () => void;
+}) {
+  return (
+    <motion.div
+      className="absolute inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="w-full max-w-md rounded-3xl bg-white p-6 text-center shadow-2xl"
+        initial={{ y: 20, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 20, scale: 0.96 }}
+      >
+        <h3 className="text-3xl font-black text-red-600">Game Over</h3>
+        <p className="mt-3 text-sm text-slate-700">
+          {reason || "Your financial position dropped below zero."}
+        </p>
+        <p className="mt-2 font-semibold text-slate-900">Net Worth: ₹{netWorth}</p>
+
+        <button
+          onClick={onRestart}
+          className="mt-5 w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-green-600 px-4 py-3 text-sm font-semibold text-white hover:from-emerald-600 hover:to-green-700"
+        >
+          Restart and Try Better Planning
+        </button>
       </motion.div>
     </motion.div>
   );
