@@ -306,7 +306,7 @@ export const useGameStore = create<GameState & GameActions>()(
         const lesson: DailyLesson = {
           day: state.player.currentDay,
           title: `Day ${state.player.currentDay} Review`,
-          content: `Today you watered your tree ${state.tree.timesWateredToday} time(s) and earned ₹${dailyEarnings}. You saved ₹${savedToday} to your bank (now ₹${state.player.bankBalance + savedToday} total) and invested ₹${investedToday}. Your bank provides liquid funds with daily interest, while investments grow faster but are locked. In the real world, this is like balancing cash for daily needs, savings for security, and investments for long-term growth.${assetImpact}`,
+          content: `Today you watered your tree ${state.tree.timesWateredToday} time(s) and earned ₹${dailyEarnings}. You saved ₹${savedToday} to your bank (now ₹${state.player.bankBalance} total) and invested ₹${investedToday}. Your bank provides liquid funds with daily interest, while investments grow faster but are locked. In the real world, this is like balancing cash for daily needs, savings for security, and investments for long-term growth.${assetImpact}`,
           tip: `Good financial habits: Save emergency funds, invest for growth, diversify assets, and always keep some cash available.`,
           basedOn: ["daily_performance"],
         };
