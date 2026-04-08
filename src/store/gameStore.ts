@@ -92,6 +92,7 @@ const initialState: GameState = {
   dayStartTotalEarnings: 0,
   todayInvested: 0,
   todayBankSaved: 0,
+  todaySavingsDeposited: 0,
   isPlaying: true,
   showEndOfDay: false,
   showLesson: false,
@@ -165,6 +166,7 @@ export const useGameStore = create<GameState & GameActions>()(
             ...state.player,
             wallet: state.player.wallet - amount,
           },
+          todaySavingsDeposited: state.todaySavingsDeposited + amount,
         });
       },
 
@@ -284,6 +286,7 @@ export const useGameStore = create<GameState & GameActions>()(
         const dailyEarnings =
           state.player.totalEarnings - state.dayStartTotalEarnings;
         const savedToday = state.todayBankSaved;
+        const savingsDepositedToday = state.todaySavingsDeposited;
         const investedToday = state.todayInvested;
         const additionalWater =
           state.currentWeather !== "none"
@@ -303,10 +306,12 @@ export const useGameStore = create<GameState & GameActions>()(
           assetImpact = `\n\nYou own ${depreciating.length} depreciating asset(s) that provide immediate income but lose value, and ${appreciating.length} appreciating asset(s) that grow in value over time. In real life, this is like owning both a car (depreciates, costs maintenance) and property (appreciates, long-term investment).`;
         }
 
+        const totalSavedToday = savedToday + savingsDepositedToday;
+
         const lesson: DailyLesson = {
           day: state.player.currentDay,
           title: `Day ${state.player.currentDay} Review`,
-          content: `Today you watered your tree ${state.tree.timesWateredToday} time(s) and earned ₹${dailyEarnings}. You saved ₹${savedToday} to your bank (now ₹${state.player.bankBalance} total) and invested ₹${investedToday}. Your bank provides liquid funds with daily interest, while investments grow faster but are locked. In the real world, this is like balancing cash for daily needs, savings for security, and investments for long-term growth.${assetImpact}`,
+          content: `Today you watered your tree ${state.tree.timesWateredToday} time(s) and earned ₹${dailyEarnings}. You saved ₹${totalSavedToday} in your accounts (₹${savedToday} to bank, ₹${savingsDepositedToday} to savings - total ₹${state.player.bankBalance + state.savings.balance}). You invested ₹${investedToday}. Your bank and savings provide liquid funds with daily interest, while investments grow faster but are locked. In the real world, this is like balancing cash for daily needs, savings for security, and investments for long-term growth.${assetImpact}`,
           tip: `Good financial habits: Save emergency funds, invest for growth, diversify assets, and always keep some cash available.`,
           basedOn: ["daily_performance"],
         };
@@ -336,8 +341,7 @@ export const useGameStore = create<GameState & GameActions>()(
           timeOfDay: "morning",
           dayStartTotalEarnings: state.player.totalEarnings,
           todayInvested: 0,
-          todayBankSaved: 0,
-        });
+          todayBankSaved: 0,          todaySavingsDeposited: 0,        });
 
         // Update AI tip
         const newState = get();

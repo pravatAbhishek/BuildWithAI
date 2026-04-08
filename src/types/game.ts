@@ -113,6 +113,7 @@ export interface GameState {
   dayStartTotalEarnings: number;
   todayInvested: number;
   todayBankSaved: number;
+  todaySavingsDeposited: number;
 
   // Game flow
   isPlaying: boolean;
