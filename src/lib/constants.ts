@@ -3,7 +3,7 @@
 export const GAME_CONFIG = {
   // Starting values
   INITIAL_MONEY: 100,
-  INITIAL_WATER: 5,
+  INITIAL_WATER: 10,
 
   // Water mechanics
   WATER_COST: 10, // Cost per water unit

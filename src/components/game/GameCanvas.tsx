@@ -27,6 +27,7 @@ export function GameCanvas() {
     saveToBank,
     investMoney,
     startNewDay,
+    resetGame,
     aiTip,
   } = useGameStore();
 
@@ -84,6 +85,15 @@ export function GameCanvas() {
         water={player.waterUnits}
         wateringsLeft={wateringsLeft}
       />
+
+      <motion.button
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.92 }}
+        onClick={() => resetGame()}
+        className="absolute top-4 right-4 z-40 rounded-full bg-red-500 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white shadow-lg hover:bg-red-600 transition-colors"
+      >
+        🔄 Reset
+      </motion.button>
 
       <div className="pointer-events-none absolute inset-x-0 top-16 text-center">
         <motion.h1
