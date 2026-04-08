@@ -22,6 +22,7 @@ import { ConsequenceReel } from "./ConsequenceReel";
 
 type Phase = "morning" | "events" | "evening" | "night" | "sunrise";
 type ShopTab = AssetType | "water";
+const AUTO_YIELD_MULTIPLIER = 0.2;
 
 const treeShakeVariants: Variants = {
   calm: { rotate: 0, scaleY: 1 },
@@ -105,8 +106,8 @@ export function GameCanvas() {
 
   const wateringsLeft = Math.max(0, 3 - tree.timesWateredToday);
   const canWater =
-      canWaterTree(tree, player.waterUnits) &&
-      phase === "morning" &&
+    canWaterTree(tree, player.waterUnits) &&
+    phase === "morning" &&
     !showSuddenEvent &&
     !isGameOver;
 
@@ -157,8 +158,21 @@ export function GameCanvas() {
     if (phase !== "morning" || isGameOver) return;
     const interval = window.setInterval(() => {
       const autoYield = Math.floor(
-        calculateTreeYield(tree, ownedAssets, currentDay, player.investmentBalance, riskMeter) * 0.2,
+        calculateTreeYield(
+          tree,
+          ownedAssets,
+          currentDay,
+          player.investmentBalance,
+          riskMeter,
+        ) * AUTO_YIELD_MULTIPLIER,
       );
+      useGameStore.setState((state) => ({
+        player: {
+          ...state.player,
+          wallet: state.player.wallet + autoYield,
+          totalEarnings: state.player.totalEarnings + autoYield,
+        },
+      }));
       setCoinPop(autoYield);
       window.setTimeout(() => setCoinPop(null), 900);
     }, 4500);
@@ -368,9 +382,6 @@ export function GameCanvas() {
             event={activeGameEvent}
             onChoice={(choiceId) => {
               handleEventChoice(choiceId);
-              window.setTimeout(() => {
-                if (!useGameStore.getState().activeGameEvent) setPhase("evening");
-              }, 250);
             }}
           />
         )}
@@ -384,6 +395,7 @@ export function GameCanvas() {
               treeHealth={treeHealth.value}
               riskMeter={riskMeter}
               consequences={eventConsequences}
+              day={currentDay}
             />
           )}
         </AnimatePresence>
@@ -1073,13 +1085,20 @@ function NightLessonBubble({
   treeHealth,
   riskMeter,
   consequences,
+  day,
 }: {
   tip: string | null;
   onContinue: () => void;
   treeHealth: number;
   riskMeter: number;
   consequences: Array<{ id: string; icon: string; title: string; summary: string }>;
+  day: number;
 }) {
+  /**
+   * Generates and downloads a local PNG summary card for family sharing.
+   * This relies on Canvas API support and may fail silently if canvas context
+   * is unavailable in restricted browser environments.
+   */
   const shareWithFamily = () => {
     const canvas = document.createElement("canvas");
     canvas.width = 900;
@@ -1096,7 +1115,7 @@ function NightLessonBubble({
     ctx.fillText(`Risk Meter: ${riskMeter}%`, 70, 240);
     ctx.fillText(`Top Choice: ${consequences.at(-1)?.summary ?? "Steady day"}`, 70, 300);
     const link = document.createElement("a");
-    link.download = `growtopia-day.png`;
+    link.download = `growtopia-day-${day}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
@@ -1141,7 +1160,7 @@ function NightLessonBubble({
         <ConsequenceReel items={consequences} />
         <button
           onClick={shareWithFamily}
-          aria-label="Share day summary as PNG"
+          aria-label="Share with Family"
           className="mt-4 w-full rounded-2xl bg-gradient-to-r from-sky-500 to-indigo-600 py-3 text-lg font-black text-white"
         >
           📸 Share with Family

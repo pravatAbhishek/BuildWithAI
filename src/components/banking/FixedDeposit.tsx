@@ -10,6 +10,8 @@ import {
   getFDOptions,
 } from "@/lib/bankingLogic";
 
+const MIN_INVESTMENT_PREVIEW_DAYS = 3;
+
 export function FixedDeposit() {
   const { player, fixedDeposits, sips, createFixedDeposit, withdrawFixedDeposit, createSIP, cancelSIP, applyInvestmentPreview, investmentPreviewDays } =
     useGameStore();
@@ -42,7 +44,7 @@ export function FixedDeposit() {
   const handleCreateSIP = () => {
     if (canCreateSIP) {
       createSIP(sipAmount, sipInterval);
-      applyInvestmentPreview(Math.max(3, sipInterval));
+      applyInvestmentPreview(Math.max(MIN_INVESTMENT_PREVIEW_DAYS, sipInterval));
       setShowCreateSIP(false);
       setSipAmount(50);
     }

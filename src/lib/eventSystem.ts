@@ -1,7 +1,11 @@
 import { EVENT_TEMPLATES, GAME_CONFIG } from "./constants";
 import type { Event, GameState, PendingEvent } from "@/types/game";
 
-function getRiskLevel(riskMeter: number) {
+const EVENT_PROBABILITY_WEIGHT_MULTIPLIER = 10;
+const EVENT_COUNT_HIGH_RISK = 3;
+const EVENT_COUNT_NORMAL_RISK = 2;
+
+export function getRiskLevel(riskMeter: number) {
   if (riskMeter >= 70) return "high";
   if (riskMeter >= 35) return "medium";
   return "low";
@@ -18,11 +22,20 @@ export function generateDailyEvents(state: Pick<GameState, "currentDay" | "riskM
 
   const extraTemptation = state.savings.balance > GAME_CONFIG.TEMPTATION_SAVINGS_THRESHOLD;
   const picks: Event[] = [];
-  const targetCount = Math.max(1, Math.min(GAME_CONFIG.MAX_EVENTS_PER_DAY, riskLevel === "high" ? 3 : 2));
+  const targetCount = Math.max(
+    1,
+    Math.min(
+      GAME_CONFIG.MAX_EVENTS_PER_DAY,
+      riskLevel === "high" ? EVENT_COUNT_HIGH_RISK : EVENT_COUNT_NORMAL_RISK,
+    ),
+  );
 
   const weighted = candidates.flatMap((event) => {
     const scale = event.type === "temptation" && extraTemptation ? 2 : 1;
-    const slots = Math.max(1, Math.round(event.probability * 10) * scale);
+    const slots = Math.max(
+      1,
+      Math.round(event.probability * EVENT_PROBABILITY_WEIGHT_MULTIPLIER) * scale,
+    );
     return Array.from({ length: slots }, () => event);
   });
 

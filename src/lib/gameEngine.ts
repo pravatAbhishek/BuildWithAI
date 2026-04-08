@@ -3,6 +3,11 @@
 import { GAME_CONFIG } from "./constants";
 import type { Tree, Player, Asset, SaplingStage } from "@/types/game";
 
+const MAX_INVESTMENT_BONUS = 0.35;
+const INVESTMENT_BONUS_CAPITAL = 5000;
+const MAX_RISK_PENALTY = 0.25;
+const RISK_PENALTY_SCALE = 400;
+
 /**
  * Calculate money earned from watering the tree
  */
@@ -36,8 +41,10 @@ export function calculateTreeYield(
     }
   }
 
-  const investmentBonus = 1 + Math.min(0.35, investmentBalance / 5000);
-  const riskPenalty = 1 - Math.min(0.25, Math.max(0, recentRiskMeter) / 400);
+  const investmentBonus =
+    1 + Math.min(MAX_INVESTMENT_BONUS, investmentBalance / INVESTMENT_BONUS_CAPITAL);
+  const riskPenalty =
+    1 - Math.min(MAX_RISK_PENALTY, Math.max(0, recentRiskMeter) / RISK_PENALTY_SCALE);
 
   return Math.floor(
     baseYield * healthMultiplier * levelBonus * assetBoost * investmentBonus * riskPenalty,

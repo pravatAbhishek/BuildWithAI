@@ -48,9 +48,14 @@ import {
 import {
   generateDailyEvents,
   resolvePendingEvents,
+  getRiskLevel,
 } from "@/lib/eventSystem";
 
 const ENABLE_LEGACY_SUDDEN_EVENTS = false;
+const createId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 // AI Tips based on player actions
 const AI_TIPS = {
@@ -483,12 +488,6 @@ function getAITip(state: GameState): string {
     return AI_TIPS.shopTip;
   }
   return AI_TIPS.balanced;
-}
-
-function getRiskLevel(riskMeter: number): "low" | "medium" | "high" {
-  if (riskMeter >= 70) return "high";
-  if (riskMeter >= 35) return "medium";
-  return "low";
 }
 
 // Generate insightful daily lesson
@@ -1050,7 +1049,7 @@ export const useGameStore = create<GameState & GameActions>()(
 
         if (consequence.scheduleEventId && consequence.scheduleAfterDays) {
           nextPending.push({
-            id: crypto.randomUUID(),
+            id: createId(),
             eventId: consequence.scheduleEventId,
             executeOnDay: state.currentDay + consequence.scheduleAfterDays,
           });
@@ -1082,7 +1081,7 @@ export const useGameStore = create<GameState & GameActions>()(
           activeGameEvent: remainingEvents[0] || null,
           eventConsequences: [
             ...state.eventConsequences,
-            { id: crypto.randomUUID(), icon: activeEvent.icon, title: activeEvent.title, summary },
+            { id: createId(), icon: activeEvent.icon, title: activeEvent.title, summary },
           ].slice(-8),
           ...getGameOverPatch(state, nextWallet, nextSavings),
         });
