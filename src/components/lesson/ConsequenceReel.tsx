@@ -1,1 +1,1 @@
-export { DailyLesson as ConsequenceReel } from "./DailyLesson";
+export { ConsequenceReel } from "@/components/game/ConsequenceReel";

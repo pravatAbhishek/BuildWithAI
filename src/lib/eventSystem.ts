@@ -7,7 +7,7 @@ function getRiskLevel(riskMeter: number) {
   return "low";
 }
 
-export function generateDailyEvents(state: Pick<GameState, "currentDay" | "riskMeter" | "savings" | "pendingEvents">): Event[] {
+export function generateDailyEvents(state: Pick<GameState, "currentDay" | "riskMeter" | "savings">): Event[] {
   const day = state.currentDay;
   const riskLevel = getRiskLevel(state.riskMeter);
   const candidates = EVENT_TEMPLATES.filter((event) => {

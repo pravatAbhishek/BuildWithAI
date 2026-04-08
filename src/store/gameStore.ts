@@ -50,6 +50,8 @@ import {
   resolvePendingEvents,
 } from "@/lib/eventSystem";
 
+const ENABLE_LEGACY_SUDDEN_EVENTS = false;
+
 // AI Tips based on player actions
 const AI_TIPS = {
   lowMoney: "💡 Tip: Try saving some money in the bank for tomorrow!",
@@ -951,14 +953,14 @@ export const useGameStore = create<GameState & GameActions>()(
           newSavings.balance,
           newAssets,
         );
-        const shouldTriggerSuddenEvent = false && nextDay >= 4 && !gameOverPatch.isGameOver;
+        const shouldTriggerSuddenEvent =
+          ENABLE_LEGACY_SUDDEN_EVENTS && nextDay >= 4 && !gameOverPatch.isGameOver;
         const suddenEvent = shouldTriggerSuddenEvent ? pickSuddenEvent(nextDay) : null;
         const pendingResolution = resolvePendingEvents(nextDay, state.pendingEvents);
         const rolledEvents = generateDailyEvents({
           currentDay: nextDay,
           riskMeter: state.riskMeter,
           savings: newSavings,
-          pendingEvents: pendingResolution.remaining,
         });
         const dailyEvents: Event[] = [...pendingResolution.dueEvents, ...rolledEvents].slice(
           0,

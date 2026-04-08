@@ -59,6 +59,7 @@ export const GAME_CONFIG = {
   SMARTPHONE_MAINTENANCE_COST: 400, // One-time repair after storm
   MAX_EVENTS_PER_DAY: 3,
   TEMPTATION_SAVINGS_THRESHOLD: 300,
+  MORNING_PHASE_DURATION_MS: 30000,
 } as const;
 
 export const EVENT_TEMPLATES: Event[] = [

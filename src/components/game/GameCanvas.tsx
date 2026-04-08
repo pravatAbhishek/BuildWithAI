@@ -10,6 +10,7 @@ import {
   canWaterTree,
   getWaterBundleOptions,
 } from "@/lib/gameEngine";
+import { GAME_CONFIG } from "@/lib/constants";
 import { calculateAssetValue } from "@/lib/assetCalculator";
 import { BankPanel } from "@/components/banking";
 import { WeatherManager } from "./WeatherManager";
@@ -161,7 +162,10 @@ export function GameCanvas() {
       setCoinPop(autoYield);
       window.setTimeout(() => setCoinPop(null), 900);
     }, 4500);
-    const timeout = window.setTimeout(() => setPhase("events"), 30000);
+    const timeout = window.setTimeout(
+      () => setPhase("events"),
+      GAME_CONFIG.MORNING_PHASE_DURATION_MS,
+    );
     return () => {
       window.clearInterval(interval);
       window.clearTimeout(timeout);
@@ -1137,6 +1141,7 @@ function NightLessonBubble({
         <ConsequenceReel items={consequences} />
         <button
           onClick={shareWithFamily}
+          aria-label="Share day summary as PNG"
           className="mt-4 w-full rounded-2xl bg-gradient-to-r from-sky-500 to-indigo-600 py-3 text-lg font-black text-white"
         >
           📸 Share with Family
