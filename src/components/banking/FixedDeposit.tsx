@@ -28,15 +28,14 @@ export function FixedDeposit() {
   };
 
   return (
-    <Card title="Fixed Deposits" icon="📜">
+    <Card title="Investing Account" icon="📈">
       <div className="space-y-4">
-        {/* FD Info */}
+        {/* Investment Info */}
         <div className="p-3 bg-purple-50 rounded-lg">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Interest Rate:</span>
+            <span className="text-gray-600">Growth Rate:</span>
             <span className="font-bold text-purple-700">
-              {GAME_CONFIG.FD_INTEREST_RATE * 100}% for{" "}
-              {GAME_CONFIG.FD_LOCK_DAYS} days
+              +{GAME_CONFIG.FD_INTEREST_RATE * 100}% after {GAME_CONFIG.FD_LOCK_DAYS} days
             </span>
           </div>
           <div className="flex justify-between text-sm mt-1">
@@ -51,7 +50,7 @@ export function FixedDeposit() {
         {fixedDeposits.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-sm font-medium text-gray-700">
-              Your Fixed Deposits
+              Your Investments
             </h4>
             {fixedDeposits.map((fd) => {
               const daysLeft = getDaysUntilMaturity(fd, player.currentDay);
@@ -102,7 +101,7 @@ export function FixedDeposit() {
         {/* Create New FD */}
         {showCreate ? (
           <div className="p-4 bg-gray-50 rounded-lg space-y-3">
-            <h4 className="font-medium">Create New FD</h4>
+            <h4 className="font-medium">Start New Investment</h4>
 
             <div>
               <label className="block text-sm text-gray-600 mb-1">
@@ -141,7 +140,7 @@ export function FixedDeposit() {
                 disabled={!canCreate}
                 className="flex-1"
               >
-                Create FD
+                Invest
               </Button>
             </div>
           </div>
@@ -151,14 +150,13 @@ export function FixedDeposit() {
             variant="primary"
             className="w-full"
           >
-            + Create New FD
+            + Start Investment
           </Button>
         )}
 
         {/* Info */}
         <p className="text-xs text-gray-500 text-center">
-          💡 FDs grow more but you can&apos;t use the money for{" "}
-          {GAME_CONFIG.FD_LOCK_DAYS} days!
+          💡 Money is locked for {GAME_CONFIG.FD_LOCK_DAYS} days. After that, it grows by {GAME_CONFIG.FD_INTEREST_RATE * 100}%!
         </p>
       </div>
     </Card>

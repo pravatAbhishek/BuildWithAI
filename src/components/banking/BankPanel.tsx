@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { SavingsAccount } from "./SavingsAccount";
 import { FixedDeposit } from "./FixedDeposit";
 
-type BankTab = "savings" | "fd";
+type BankTab = "savings" | "invest";
 
 export function BankPanel() {
   const [activeTab, setActiveTab] = useState<BankTab>("savings");
@@ -25,19 +25,19 @@ export function BankPanel() {
         </button>
         <button
           className={`flex-1 py-3 text-sm font-medium transition-colors ${
-            activeTab === "fd"
+            activeTab === "invest"
               ? "bg-purple-500 text-white"
               : "bg-gray-50 text-gray-600 hover:bg-gray-100"
           }`}
-          onClick={() => setActiveTab("fd")}
+          onClick={() => setActiveTab("invest")}
         >
-          📜 Fixed Deposit
+          📈 Investing
         </button>
       </div>
 
       {/* Tab Content */}
       {activeTab === "savings" && <SavingsAccount />}
-      {activeTab === "fd" && <FixedDeposit />}
+      {activeTab === "invest" && <FixedDeposit />}
     </div>
   );
 }

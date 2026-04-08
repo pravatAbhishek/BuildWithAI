@@ -18,10 +18,10 @@ export const GAME_CONFIG = {
   // Banking - Savings Account
   SAVINGS_INTEREST_RATE: 0.002, // 0.2% daily (low but safe)
 
-  // Banking - Fixed Deposit
+  // Banking - Investing Account
   FD_MINIMUM_AMOUNT: 50,
-  FD_LOCK_DAYS: 10,
-  FD_INTEREST_RATE: 0.05, // 5% for 10 days (0.5% daily equivalent)
+  FD_LOCK_DAYS: 3,
+  FD_INTEREST_RATE: 0.06, // 6% after 3 days
 
   // Days
   WATERING_SESSIONS_PER_DAY: 3, // After this many waterings, day can end

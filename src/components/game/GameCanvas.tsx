@@ -5,6 +5,7 @@ import type { Variants } from "framer-motion";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
 import { calculateTreeYield, canWaterTree } from "@/lib/gameEngine";
+import { BankPanel } from "@/components/banking";
 import type { AssetType, MarketAsset } from "@/types/game";
 
 type Phase = "morning" | "evening" | "night" | "sunrise";
@@ -34,12 +35,9 @@ export function GameCanvas() {
   const [shopTab, setShopTab] = useState<ShopTab>("depreciating");
   const [shakeTree, setShakeTree] = useState(false);
   const [coinPop, setCoinPop] = useState<number | null>(null);
-  const [bankChoice, setBankChoice] = useState(0);
-  const [investChoice, setInvestChoice] = useState(0);
 
   const wateringsLeft = Math.max(0, 3 - tree.timesWateredToday);
   const canWater = canWaterTree(tree, player.waterUnits) && phase === "morning";
-  const remaining = Math.max(0, player.wallet - bankChoice - investChoice);
 
   const bgClass = useMemo(() => {
     if (phase === "morning") return "from-sky-300 via-cyan-200 to-emerald-200";
@@ -64,11 +62,6 @@ export function GameCanvas() {
   };
 
   const onConfirmEvening = () => {
-    if (bankChoice + investChoice > player.wallet) return;
-    if (bankChoice > 0) saveToBank(bankChoice);
-    if (investChoice > 0) investMoney(investChoice);
-    setBankChoice(0);
-    setInvestChoice(0);
     setPhase("night");
   };
 
@@ -127,13 +120,7 @@ export function GameCanvas() {
 
       <AnimatePresence>
         {phase === "evening" && (
-          <EveningChoiceModal
-            wallet={player.wallet}
-            bankChoice={bankChoice}
-            setBankChoice={setBankChoice}
-            investChoice={investChoice}
-            setInvestChoice={setInvestChoice}
-            remaining={remaining}
+          <BankingInterfaceModal
             onConfirm={onConfirmEvening}
           />
         )}
@@ -425,6 +412,48 @@ function ShopModal({
   );
 }
 
+function BankingInterfaceModal({
+  onConfirm,
+}: {
+  onConfirm: () => void;
+}) {
+  return (
+    <motion.div
+      className="absolute inset-0 z-40 flex items-center justify-center bg-black/35 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="w-full max-w-2xl rounded-[2rem] bg-white p-6 shadow-2xl md:p-8"
+        initial={{ y: 24, scale: 0.95 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 24, opacity: 0 }}
+      >
+        <h2 className="text-center text-4xl font-black text-emerald-800 mb-1">
+          🏦 Banking Center
+        </h2>
+        <p className="text-center text-sm text-gray-600 mb-6">
+          Manage your Savings and Investing accounts for the next day.
+        </p>
+
+        <div className="mb-6">
+          <BankPanel />
+        </div>
+
+        <motion.button
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.94 }}
+          onClick={onConfirm}
+          className="w-full rounded-full bg-indigo-600 py-5 text-3xl font-black text-white shadow-xl"
+        >
+          Continue to Night
+        </motion.button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function EveningChoiceModal({
   wallet,
   bankChoice,
@@ -525,6 +554,7 @@ function EveningChoiceModal({
     </motion.div>
   );
 }
+
 
 function NightLessonBubble({
   tip,
