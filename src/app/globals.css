@@ -278,6 +278,31 @@ body {
   }
 }
 
+@keyframes coinTrail {
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-80px) translateX(20px) scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes particleBurst {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--burst-x), var(--burst-y)) scale(0.1);
+    opacity: 0;
+  }
+}
+
 /* Modal slide up */
 
 @keyframes slideUp {
@@ -386,6 +411,14 @@ body {
 
 .animate-leaf-fall {
   animation: leafFall 5s linear infinite;
+}
+
+.animate-coin-trail {
+  animation: coinTrail 0.9s ease-out forwards;
+}
+
+.animate-particle-burst {
+  animation: particleBurst 0.8s ease-out forwards;
 }
 
 .animate-slide-up {

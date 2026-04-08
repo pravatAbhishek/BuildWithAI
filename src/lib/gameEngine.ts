@@ -10,6 +10,8 @@ export function calculateTreeYield(
   tree: Tree,
   assets: Asset[],
   currentDay: number,
+  investmentBalance: number = 0,
+  recentRiskMeter: number = 0,
 ): number {
   const baseYield = GAME_CONFIG.BASE_TREE_YIELD;
 
@@ -34,7 +36,12 @@ export function calculateTreeYield(
     }
   }
 
-  return Math.floor(baseYield * healthMultiplier * levelBonus * assetBoost);
+  const investmentBonus = 1 + Math.min(0.35, investmentBalance / 5000);
+  const riskPenalty = 1 - Math.min(0.25, Math.max(0, recentRiskMeter) / 400);
+
+  return Math.floor(
+    baseYield * healthMultiplier * levelBonus * assetBoost * investmentBonus * riskPenalty,
+  );
 }
 
 /**

@@ -14,6 +14,8 @@ export { GameHUD } from "./GameHUD";
 export { AIAdvisor } from "./AIAdvisor";
 export { ShopOverlay } from "./ShopOverlay";
 export { EndDayScreen } from "./EndDayScreen";
+export { EventCard } from "./EventCard";
+export { ConsequenceReel } from "./ConsequenceReel";
 
 // Weather components
 export { RainEffect } from "./RainEffect";

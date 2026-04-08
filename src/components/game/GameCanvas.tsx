@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Variants } from "framer-motion";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
@@ -16,8 +16,10 @@ import { WeatherManager } from "./WeatherManager";
 import { WeatherOverlay } from "./WeatherOverlay";
 import { DailyLesson } from "@/components/lesson";
 import type { AssetType, MarketAsset, Asset, SuddenEvent } from "@/types/game";
+import { EventCard } from "./EventCard";
+import { ConsequenceReel } from "./ConsequenceReel";
 
-type Phase = "morning" | "evening" | "night" | "sunrise";
+type Phase = "morning" | "events" | "evening" | "night" | "sunrise";
 type ShopTab = AssetType | "water";
 
 const treeShakeVariants: Variants = {
@@ -60,6 +62,10 @@ export function GameCanvas() {
     ownedAssets,
     marketAssets,
     savings,
+    currentDay,
+    riskMeter,
+    riskLevel,
+    treeHealth,
     currentWeather,
     fixedDeposits,
     sips,
@@ -67,7 +73,7 @@ export function GameCanvas() {
     buyWater,
     buyAsset,
     sellAsset,
-    startNewDay,
+    advanceDay,
     resetGame,
     aiTip,
     showBankModal,
@@ -75,6 +81,10 @@ export function GameCanvas() {
     activeSuddenEvent,
     showSuddenEvent,
     resolveSuddenEvent,
+    activeGameEvent,
+    activeDailyEvents,
+    handleEventChoice,
+    eventConsequences,
     maintenanceChargesToday,
     showMaintenancePopup,
     dismissMaintenancePopup,
@@ -90,11 +100,12 @@ export function GameCanvas() {
   const [shakeTree, setShakeTree] = useState(false);
   const [coinPop, setCoinPop] = useState<number | null>(null);
   const [showSparkles, setShowSparkles] = useState(false);
+  const morningAwardRef = useRef<number>(0);
 
   const wateringsLeft = Math.max(0, 3 - tree.timesWateredToday);
   const canWater =
-    canWaterTree(tree, player.waterUnits) &&
-    phase === "morning" &&
+      canWaterTree(tree, player.waterUnits) &&
+      phase === "morning" &&
     !showSuddenEvent &&
     !isGameOver;
 
@@ -115,6 +126,55 @@ export function GameCanvas() {
   );
 
   const netWorth = player.wallet + savings.balance + inventoryValue;
+
+  useEffect(() => {
+    if (morningAwardRef.current === currentDay) return;
+    morningAwardRef.current = currentDay;
+    const morningEarnings = Math.floor(
+      calculateTreeYield(
+        tree,
+        ownedAssets,
+        currentDay,
+        player.investmentBalance,
+        riskMeter,
+      ),
+    );
+    useGameStore.setState((state) => ({
+      player: {
+        ...state.player,
+        wallet: state.player.wallet + morningEarnings,
+        totalEarnings: state.player.totalEarnings + morningEarnings,
+      },
+    }));
+    window.setTimeout(() => setCoinPop(morningEarnings), 0);
+    window.setTimeout(() => setShowSparkles(true), 0);
+    window.setTimeout(() => setCoinPop(null), 1200);
+    window.setTimeout(() => setShowSparkles(false), 900);
+  }, [currentDay, ownedAssets, player.investmentBalance, riskMeter, tree]);
+
+  useEffect(() => {
+    if (phase !== "morning" || isGameOver) return;
+    const interval = window.setInterval(() => {
+      const autoYield = Math.floor(
+        calculateTreeYield(tree, ownedAssets, currentDay, player.investmentBalance, riskMeter) * 0.2,
+      );
+      setCoinPop(autoYield);
+      window.setTimeout(() => setCoinPop(null), 900);
+    }, 4500);
+    const timeout = window.setTimeout(() => setPhase("events"), 30000);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(timeout);
+    };
+  }, [phase, isGameOver, tree, ownedAssets, currentDay, player.investmentBalance, riskMeter]);
+
+  useEffect(() => {
+    if (phase !== "events" || isGameOver) return;
+    if (!activeGameEvent && activeDailyEvents.length === 0) {
+      const timeout = window.setTimeout(() => setPhase("evening"), 1000);
+      return () => window.clearTimeout(timeout);
+    }
+  }, [phase, activeGameEvent, activeDailyEvents.length, isGameOver]);
 
   const missions = useMemo(
     () => [
@@ -179,9 +239,6 @@ export function GameCanvas() {
     window.setTimeout(() => setCoinPop(null), 1200);
     window.setTimeout(() => setShowSparkles(false), 1000);
 
-    if (tree.timesWateredToday + 1 >= 3) {
-      window.setTimeout(() => setPhase("evening"), 600);
-    }
   };
 
   const onConfirmEvening = () => {
@@ -191,7 +248,7 @@ export function GameCanvas() {
   const onStartNewDay = () => {
     setPhase("sunrise");
     window.setTimeout(() => {
-      startNewDay();
+      advanceDay();
       setShopOpen(false);
       setMissionsOpen(false);
       setInventoryOpen(false);
@@ -209,11 +266,13 @@ export function GameCanvas() {
       >
         {/* Enhanced Top HUD */}
         <TopHUD
-          day={player.currentDay}
+          day={currentDay}
           wallet={player.wallet}
           water={player.waterUnits}
           wateringsLeft={wateringsLeft}
           savings={savings.balance}
+          riskMeter={riskMeter}
+          riskLevel={riskLevel}
           onBankClick={toggleBankModal}
         />
 
@@ -230,6 +289,7 @@ export function GameCanvas() {
         {/* Scene with Tree */}
         <SceneTree
           treeStage={tree.stage}
+          treeHealth={treeHealth.value}
           shakeTree={shakeTree}
           phase={phase}
           canWater={canWater}
@@ -286,10 +346,41 @@ export function GameCanvas() {
           )}
         </AnimatePresence>
 
+        <AnimatePresence>
+          {phase === "events" && (
+            <motion.div
+              className="absolute top-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-900/80 px-4 py-2 text-sm font-bold text-white"
+              initial={{ opacity: 0, y: -16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+            >
+              ⚡ Event Time
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {phase === "events" && (
+          <EventCard
+            event={activeGameEvent}
+            onChoice={(choiceId) => {
+              handleEventChoice(choiceId);
+              window.setTimeout(() => {
+                if (!useGameStore.getState().activeGameEvent) setPhase("evening");
+              }, 250);
+            }}
+          />
+        )}
+
         {/* Night Lesson Bubble */}
         <AnimatePresence>
           {phase === "night" && (
-            <NightLessonBubble tip={aiTip} onContinue={onStartNewDay} />
+            <NightLessonBubble
+              tip={aiTip}
+              onContinue={onStartNewDay}
+              treeHealth={treeHealth.value}
+              riskMeter={riskMeter}
+              consequences={eventConsequences}
+            />
           )}
         </AnimatePresence>
 
@@ -304,7 +395,7 @@ export function GameCanvas() {
             <BottomActions
               canEndDay={tree.timesWateredToday > 0 && !showSuddenEvent && !isGameOver}
               onShop={() => !showSuddenEvent && !isGameOver && setShopOpen(true)}
-              onEndDay={() => !showSuddenEvent && !isGameOver && setPhase("evening")}
+              onEndDay={() => !showSuddenEvent && !isGameOver && setPhase("events")}
               onBank={() => !showSuddenEvent && !isGameOver && toggleBankModal()}
               onMissions={() => setMissionsOpen(true)}
               onInventory={() => setInventoryOpen(true)}
@@ -394,6 +485,8 @@ function TopHUD({
   water,
   wateringsLeft,
   savings,
+  riskMeter,
+  riskLevel,
   onBankClick,
 }: {
   day: number;
@@ -401,6 +494,8 @@ function TopHUD({
   water: number;
   wateringsLeft: number;
   savings: number;
+  riskMeter: number;
+  riskLevel: "low" | "medium" | "high";
   onBankClick: () => void;
 }) {
   return (
@@ -409,7 +504,7 @@ function TopHUD({
       animate={{ y: 0, opacity: 1 }}
       className="absolute left-0 right-0 top-0 z-30 p-4"
     >
-      <div className="mx-auto flex max-w-4xl items-center justify-between rounded-2xl bg-white/95 backdrop-blur-sm px-4 py-3 shadow-xl border border-white/50">
+      <div className="mx-auto flex max-w-5xl items-center justify-between rounded-2xl bg-white/95 backdrop-blur-sm px-4 py-3 shadow-xl border border-white/50 gap-2">
         {/* Day Counter */}
         <motion.div 
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-br from-emerald-100 to-emerald-200"
@@ -459,6 +554,17 @@ function TopHUD({
           <span className="text-2xl">🏦</span>
           <span className="text-xl font-black text-green-700">₹{savings}</span>
         </motion.button>
+        <motion.div className="min-w-40 rounded-xl bg-slate-100 px-3 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Risk {riskLevel}</p>
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className={`h-full rounded-full ${
+                riskMeter > 65 ? "bg-red-500" : riskMeter > 35 ? "bg-amber-500" : "bg-emerald-500"
+              }`}
+              style={{ width: `${Math.min(100, riskMeter)}%` }}
+            />
+          </div>
+        </motion.div>
       </div>
     </motion.div>
   );
@@ -467,12 +573,14 @@ function TopHUD({
 // Enhanced Scene Tree
 function SceneTree({
   treeStage,
+  treeHealth,
   phase,
   shakeTree,
   canWater,
   onWater,
 }: {
   treeStage: "seed" | "sprout" | "small" | "medium" | "large" | "full";
+  treeHealth: number;
   phase: Phase;
   shakeTree: boolean;
   canWater: boolean;
@@ -500,6 +608,14 @@ function SceneTree({
         onClick={onWater}
         whileHover={canWater ? { scale: 1.05 } : {}}
         style={{ fontSize: "clamp(8rem, 15vw, 13rem)" }}
+        whileInView={{
+          filter:
+            treeHealth > 85
+              ? "drop-shadow(0 0 18px rgba(234,179,8,0.8))"
+              : treeHealth > 45
+                ? "drop-shadow(0 0 12px rgba(34,197,94,0.5))"
+                : "saturate(0.7)",
+        }}
       >
         {treeEmoji}
       </motion.div>
@@ -950,10 +1066,37 @@ function BankingInterfaceModal({
 function NightLessonBubble({
   tip,
   onContinue,
+  treeHealth,
+  riskMeter,
+  consequences,
 }: {
   tip: string | null;
   onContinue: () => void;
+  treeHealth: number;
+  riskMeter: number;
+  consequences: Array<{ id: string; icon: string; title: string; summary: string }>;
 }) {
+  const shareWithFamily = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 900;
+    canvas.height = 500;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#E0F2FE";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#166534";
+    ctx.font = "bold 60px sans-serif";
+    ctx.fillText("🌳 Growtopia Day Summary", 70, 90);
+    ctx.font = "bold 40px sans-serif";
+    ctx.fillText(`Tree Health: ${treeHealth}%`, 70, 180);
+    ctx.fillText(`Risk Meter: ${riskMeter}%`, 70, 240);
+    ctx.fillText(`Top Choice: ${consequences.at(-1)?.summary ?? "Steady day"}`, 70, 300);
+    const link = document.createElement("a");
+    link.download = `growtopia-day.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  };
+
   return (
     <motion.div
       className="absolute inset-0 z-40 flex items-end justify-center bg-gradient-to-b from-black/30 to-black/50 backdrop-blur-sm p-4 pb-12"
@@ -991,6 +1134,13 @@ function NightLessonBubble({
         </div>
 
         {/* Continue Button with glow */}
+        <ConsequenceReel items={consequences} />
+        <button
+          onClick={shareWithFamily}
+          className="mt-4 w-full rounded-2xl bg-gradient-to-r from-sky-500 to-indigo-600 py-3 text-lg font-black text-white"
+        >
+          📸 Share with Family
+        </button>
         <motion.button
           whileHover={{ scale: 1.03, y: -2 }}
           whileTap={{ scale: 0.97 }}

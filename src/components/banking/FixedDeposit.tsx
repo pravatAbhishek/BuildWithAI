@@ -11,7 +11,7 @@ import {
 } from "@/lib/bankingLogic";
 
 export function FixedDeposit() {
-  const { player, fixedDeposits, sips, createFixedDeposit, withdrawFixedDeposit, createSIP, cancelSIP } =
+  const { player, fixedDeposits, sips, createFixedDeposit, withdrawFixedDeposit, createSIP, cancelSIP, applyInvestmentPreview, investmentPreviewDays } =
     useGameStore();
   const [amount, setAmount] = useState<number>(GAME_CONFIG.FD_MINIMUM_AMOUNT);
   const [selectedDuration, setSelectedDuration] = useState(3);
@@ -33,6 +33,7 @@ export function FixedDeposit() {
   const handleCreateFD = () => {
     if (canCreateFD) {
       createFixedDeposit(amount, selectedDuration);
+      applyInvestmentPreview(selectedDuration);
       setShowCreate(false);
       setAmount(GAME_CONFIG.FD_MINIMUM_AMOUNT);
     }
@@ -41,6 +42,7 @@ export function FixedDeposit() {
   const handleCreateSIP = () => {
     if (canCreateSIP) {
       createSIP(sipAmount, sipInterval);
+      applyInvestmentPreview(Math.max(3, sipInterval));
       setShowCreateSIP(false);
       setSipAmount(50);
     }
@@ -411,6 +413,23 @@ export function FixedDeposit() {
       </AnimatePresence>
 
       {/* Info */}
+      {investmentPreviewDays !== null && (
+        <motion.div
+          className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-lime-50 p-3 text-center"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <p className="text-xs font-semibold text-emerald-700">Future Tree Preview</p>
+          <motion.div
+            className="text-4xl"
+            animate={{ scale: [1, 1.2, 1], rotate: [0, 2, -2, 0] }}
+            transition={{ duration: 0.8 }}
+          >
+            🌱 → 🌳
+          </motion.div>
+          <p className="text-sm font-bold text-emerald-900">Growth in {investmentPreviewDays} days</p>
+        </motion.div>
+      )}
       <p className="text-xs text-gray-500 text-center">
         💡 FDs lock money for fixed returns. SIPs auto-invest regularly for compound growth!
       </p>

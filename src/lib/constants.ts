@@ -1,5 +1,7 @@
 // Game configuration constants
 
+import type { Event } from "@/types/game";
+
 export const GAME_CONFIG = {
   // Starting values
   INITIAL_MONEY: 0, // Start with zero balance
@@ -55,7 +57,46 @@ export const GAME_CONFIG = {
   CAR_MAINTENANCE_INTERVAL: 15, // Every 15 days
   CAR_MAINTENANCE_BASE_COST: 2, // Starting maintenance cost (doubles each time)
   SMARTPHONE_MAINTENANCE_COST: 400, // One-time repair after storm
+  MAX_EVENTS_PER_DAY: 3,
+  TEMPTATION_SAVINGS_THRESHOLD: 300,
 } as const;
+
+export const EVENT_TEMPLATES: Event[] = [
+  {
+    id: "sneaker-flash",
+    title: "Limited Sneakers",
+    icon: "👟",
+    type: "temptation",
+    probability: 0.12,
+    choices: [
+      {
+        id: "take",
+        label: "Take Offer",
+        icon: "✨",
+        consequence: { walletDelta: -150, riskDelta: 20, scheduleEventId: "sneaker-break", scheduleAfterDays: 2 },
+      },
+      { id: "skip", label: "Ignore", icon: "🌱", consequence: { treeHealthDelta: 4, riskDelta: -4 } },
+    ],
+  },
+  {
+    id: "sneaker-break",
+    title: "Sneakers Broke",
+    icon: "💥",
+    type: "loss",
+    probability: 0,
+    choices: [{ id: "pay", label: "Pay Repair", icon: "💸", consequence: { walletDelta: -200, treeHealthDelta: -15, riskDelta: 10 } }],
+  },
+  { id: "phone-bill", title: "Phone Bill Surprise", icon: "📱", type: "loss", probability: 0.1, choices: [{ id: "pay", label: "Pay Bill", icon: "💸", consequence: { walletDelta: -120 } }, { id: "delay", label: "Delay", icon: "⚠️", consequence: { treeHealthDelta: -20, riskDelta: 10 } }] },
+  { id: "healthy-gift", title: "Healthy Tree Gift", icon: "🎁", type: "reward", probability: 0.08, choices: [{ id: "accept", label: "Take Gift", icon: "💧", consequence: { rewardWater: 3, treeHealthDelta: 5, riskDelta: -5 } }] },
+  { id: "fd-tease", title: "FD Growth Preview", icon: "🔒", type: "invest", probability: 0.09, choices: [{ id: "invest", label: "Lock FD", icon: "🌳", consequence: { walletDelta: -100, investmentDelta: 120, treeHealthDelta: 6 } }, { id: "hold", label: "Not Now", icon: "👀", consequence: { riskDelta: 2 } }] },
+  { id: "market-dip", title: "Market Dip", icon: "📉", type: "market", probability: 0.08, choices: [{ id: "hold", label: "Hold", icon: "🧠", consequence: { treeHealthDelta: 2 } }, { id: "panic", label: "Panic Sell", icon: "😵", consequence: { walletDelta: -80, riskDelta: 8 } }] },
+  { id: "street-food", title: "Street Food Buzz", icon: "🍟", type: "temptation", probability: 0.08, choices: [{ id: "buy", label: "Buy Now", icon: "😋", consequence: { walletDelta: -80, riskDelta: 8 } }, { id: "skip", label: "Skip", icon: "👍", consequence: { treeHealthDelta: 3, riskDelta: -3 } }] },
+  { id: "festival", title: "Festival Spend", icon: "🎉", type: "temptation", probability: 0.08, choices: [{ id: "big", label: "Big Spend", icon: "🔥", consequence: { walletDelta: -180, riskDelta: 12 } }, { id: "small", label: "Small Spend", icon: "🙂", consequence: { walletDelta: -60, riskDelta: 2 } }, { id: "save", label: "Save", icon: "💰", consequence: { treeHealthDelta: 4, riskDelta: -4 } }] },
+  { id: "water-bonus", title: "Rain Barrel Found", icon: "🪣", type: "reward", probability: 0.07, choices: [{ id: "collect", label: "Collect", icon: "💧", consequence: { rewardWater: 5, riskDelta: -4 } }] },
+  { id: "bike-repair", title: "Bike Repair", icon: "🚲", type: "loss", probability: 0.07, choices: [{ id: "fix", label: "Fix", icon: "🛠️", consequence: { walletDelta: -90 } }, { id: "ignore", label: "Ignore", icon: "❌", consequence: { treeHealthDelta: -10, riskDelta: 8 } }] },
+  { id: "sip-nudge", title: "Tiny SIP?", icon: "📊", type: "invest", probability: 0.07, choices: [{ id: "start", label: "Start SIP", icon: "🌱", consequence: { walletDelta: -50, investmentDelta: 65, treeHealthDelta: 4 } }, { id: "later", label: "Later", icon: "⏳", consequence: { riskDelta: 2 } }] },
+  { id: "school-trip", title: "School Trip", icon: "🚌", type: "temptation", probability: 0.08, choices: [{ id: "premium", label: "Premium", icon: "⭐", consequence: { walletDelta: -140, riskDelta: 9 } }, { id: "budget", label: "Budget", icon: "✅", consequence: { walletDelta: -70 } }, { id: "skip", label: "Skip", icon: "💪", consequence: { treeHealthDelta: 3, riskDelta: -2 } }] },
+];
 
 export const MARKET_ASSETS = [
   // Depreciating Assets

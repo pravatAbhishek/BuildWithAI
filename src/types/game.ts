@@ -11,6 +11,7 @@ export type SaplingStage =
 export type GameScreen = "play" | "shop" | "end-day" | "bank" | "invest";
 export type WeatherEvent = "none" | "rain" | "drought" | "storm";
 export type EventOutcomeQuality = "weak" | "balanced" | "strong" | "neutral";
+export type RiskLevel = "low" | "medium" | "high";
 
 export interface Player {
   id: string;
@@ -129,6 +130,45 @@ export interface DailyLesson {
   improvements?: string[]; // What could be better
 }
 
+export interface EventChoiceConsequence {
+  walletDelta?: number;
+  savingsDelta?: number;
+  investmentDelta?: number;
+  treeHealthDelta?: number;
+  riskDelta?: number;
+  rewardWater?: number;
+  scheduleEventId?: string;
+  scheduleAfterDays?: number;
+}
+
+export interface EventChoice {
+  id: string;
+  label: string;
+  icon: string;
+  consequence: EventChoiceConsequence;
+}
+
+export interface Event {
+  id: string;
+  title: string;
+  icon: string;
+  type: "temptation" | "loss" | "reward" | "invest" | "market";
+  probability: number;
+  minDay?: number;
+  maxDay?: number;
+  choices: EventChoice[];
+}
+
+export interface PendingEvent {
+  id: string;
+  eventId: string;
+  executeOnDay: number;
+}
+
+export interface TreeHealth {
+  value: number;
+}
+
 export interface SuddenEventOption {
   id: string;
   label: string;
@@ -180,6 +220,20 @@ export interface GameState {
   ownedAssets: Asset[];
   marketAssets: MarketAsset[];
   lessons: DailyLesson[];
+  currentDay: number;
+  treeHealth: TreeHealth;
+  riskMeter: number;
+  riskLevel: RiskLevel;
+  pendingEvents: PendingEvent[];
+  activeDailyEvents: Event[];
+  activeGameEvent: Event | null;
+  eventConsequences: Array<{
+    id: string;
+    icon: string;
+    title: string;
+    summary: string;
+  }>;
+  investmentPreviewDays: number | null;
 
   // Visual state
   timeOfDay: TimeOfDay;
@@ -248,6 +302,9 @@ export interface GameActions {
   // Day progression
   endDay: () => void;
   startNewDay: () => void;
+  advanceDay: () => void;
+  handleEventChoice: (choiceId: string) => void;
+  applyInvestmentPreview: (days: number | null) => void;
 
   // Screen navigation
   setScreen: (screen: GameScreen) => void;

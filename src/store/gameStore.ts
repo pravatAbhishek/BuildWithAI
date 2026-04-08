@@ -12,6 +12,8 @@ import type {
   SuddenEvent,
   EventResolutionLog,
   StormEmergency,
+  Event,
+  PendingEvent,
 } from "@/types/game";
 import { GAME_CONFIG, MARKET_ASSETS } from "@/lib/constants";
 import {
@@ -43,6 +45,10 @@ import {
   purchaseAsset,
   calculateDailyMaintenanceBreakdown,
 } from "@/lib/assetCalculator";
+import {
+  generateDailyEvents,
+  resolvePendingEvents,
+} from "@/lib/eventSystem";
 
 // AI Tips based on player actions
 const AI_TIPS = {
@@ -477,6 +483,12 @@ function getAITip(state: GameState): string {
   return AI_TIPS.balanced;
 }
 
+function getRiskLevel(riskMeter: number): "low" | "medium" | "high" {
+  if (riskMeter >= 70) return "high";
+  if (riskMeter >= 35) return "medium";
+  return "low";
+}
+
 // Generate insightful daily lesson
 function generateDailyLesson(state: GameState): DailyLesson {
   const dailyEarnings = state.player.totalEarnings - state.dayStartTotalEarnings;
@@ -585,6 +597,15 @@ const initialState: GameState = {
   ownedAssets: [],
   marketAssets: MARKET_ASSETS as MarketAsset[],
   lessons: [],
+  currentDay: 1,
+  treeHealth: { value: 100 },
+  riskMeter: 0,
+  riskLevel: "low",
+  pendingEvents: [],
+  activeDailyEvents: [],
+  activeGameEvent: null,
+  eventConsequences: [],
+  investmentPreviewDays: null,
   timeOfDay: "morning",
   currentScreen: "play",
   showWaterEffect: false,
@@ -631,12 +652,16 @@ export const useGameStore = create<GameState & GameActions>()(
           state.tree,
           state.ownedAssets,
           state.player.currentDay,
+          state.player.investmentBalance,
+          state.riskMeter,
         );
         const earnings = applyWeatherModifier(baseEarnings, state.currentWeather);
+        const nextTree = updateTreeAfterWatering(state.tree);
         const nextWallet = state.player.wallet + earnings;
 
         set({
-          tree: updateTreeAfterWatering(state.tree),
+          tree: nextTree,
+          treeHealth: { value: nextTree.health },
           player: {
             ...state.player,
             wallet: nextWallet,
@@ -731,6 +756,11 @@ export const useGameStore = create<GameState & GameActions>()(
 
         set({
           fixedDeposits: [...state.fixedDeposits, fd],
+          tree: {
+            ...state.tree,
+            health: Math.min(100, state.tree.health + 2),
+          },
+          treeHealth: { value: Math.min(100, state.tree.health + 2) },
           player: {
             ...state.player,
             wallet: state.player.wallet - amount,
@@ -777,6 +807,11 @@ export const useGameStore = create<GameState & GameActions>()(
 
         set({
           sips: [...state.sips, sip],
+          tree: {
+            ...state.tree,
+            health: Math.min(100, state.tree.health + 2),
+          },
+          treeHealth: { value: Math.min(100, state.tree.health + 2) },
           player: {
             ...state.player,
             wallet: state.player.wallet - amount, // First installment
@@ -872,7 +907,7 @@ export const useGameStore = create<GameState & GameActions>()(
       startNewDay: () => {
         const state = get();
         if (!state.isPlaying) return;
-        const nextDay = state.player.currentDay + 1;
+        const nextDay = state.currentDay + 1;
 
         // Apply daily changes
         const newSavings = applySavingsInterest(state.savings);
@@ -916,11 +951,25 @@ export const useGameStore = create<GameState & GameActions>()(
           newSavings.balance,
           newAssets,
         );
-        const shouldTriggerSuddenEvent = nextDay >= 4 && !gameOverPatch.isGameOver;
+        const shouldTriggerSuddenEvent = false && nextDay >= 4 && !gameOverPatch.isGameOver;
         const suddenEvent = shouldTriggerSuddenEvent ? pickSuddenEvent(nextDay) : null;
+        const pendingResolution = resolvePendingEvents(nextDay, state.pendingEvents);
+        const rolledEvents = generateDailyEvents({
+          currentDay: nextDay,
+          riskMeter: state.riskMeter,
+          savings: newSavings,
+          pendingEvents: pendingResolution.remaining,
+        });
+        const dailyEvents: Event[] = [...pendingResolution.dueEvents, ...rolledEvents].slice(
+          0,
+          GAME_CONFIG.MAX_EVENTS_PER_DAY,
+        );
+        const nextTree = resetTreeForNewDay(state.tree);
+        const nextRiskMeter = Math.max(0, state.riskMeter - 3);
 
         set({
-          tree: resetTreeForNewDay(state.tree),
+          tree: nextTree,
+          treeHealth: { value: nextTree.health },
           savings: newSavings,
           fixedDeposits: newFDs,
           sips: updatedSips,
@@ -933,6 +982,12 @@ export const useGameStore = create<GameState & GameActions>()(
             investmentBalance: state.player.investmentBalance + investmentGrowth,
             waterUnits: state.player.waterUnits,
           },
+          currentDay: nextDay,
+          riskMeter: nextRiskMeter,
+          riskLevel: getRiskLevel(nextRiskMeter),
+          pendingEvents: pendingResolution.remaining,
+          activeDailyEvents: dailyEvents,
+          activeGameEvent: dailyEvents[0] || null,
           lessons: [...state.lessons, lesson],
           showEndOfDay: false,
           showLesson: true,
@@ -953,12 +1008,86 @@ export const useGameStore = create<GameState & GameActions>()(
           showSuddenEvent: suddenEvent !== null,
           lastSuddenEventDay: suddenEvent ? nextDay : state.lastSuddenEventDay,
           latestEventResolution: null,
+          investmentPreviewDays: null,
           ...gameOverPatch,
         });
 
         // Update AI tip
         const newState = get();
         set({ aiTip: getAITip(newState) });
+      },
+
+      advanceDay: () => {
+        const state = get();
+        if (!state.isPlaying) return;
+        if (state.showSuddenEvent || state.activeGameEvent) return;
+        get().startNewDay();
+      },
+
+      handleEventChoice: (choiceId: string) => {
+        const state = get();
+        const activeEvent = state.activeGameEvent;
+        if (!activeEvent) return;
+
+        const choice = activeEvent.choices.find((item) => item.id === choiceId);
+        if (!choice) return;
+
+        const consequence = choice.consequence;
+        const nextWallet = state.player.wallet + (consequence.walletDelta || 0);
+        const nextSavings = Math.max(0, state.savings.balance + (consequence.savingsDelta || 0));
+        const nextInvestment = Math.max(
+          0,
+          state.player.investmentBalance + (consequence.investmentDelta || 0),
+        );
+        const nextTreeHealth = Math.max(
+          0,
+          Math.min(100, state.tree.health + (consequence.treeHealthDelta || 0)),
+        );
+        const nextRisk = Math.max(0, Math.min(100, state.riskMeter + (consequence.riskDelta || 0)));
+        const nextPending: PendingEvent[] = [...state.pendingEvents];
+
+        if (consequence.scheduleEventId && consequence.scheduleAfterDays) {
+          nextPending.push({
+            id: crypto.randomUUID(),
+            eventId: consequence.scheduleEventId,
+            executeOnDay: state.currentDay + consequence.scheduleAfterDays,
+          });
+        }
+
+        const remainingEvents = state.activeDailyEvents.filter((event) => event.id !== activeEvent.id);
+        const summary = `${choice.icon} ${choice.label}`;
+
+        set({
+          player: {
+            ...state.player,
+            wallet: nextWallet,
+            investmentBalance: nextInvestment,
+            waterUnits: state.player.waterUnits + (consequence.rewardWater || 0),
+          },
+          savings: {
+            ...state.savings,
+            balance: nextSavings,
+          },
+          tree: {
+            ...state.tree,
+            health: nextTreeHealth,
+          },
+          treeHealth: { value: nextTreeHealth },
+          riskMeter: nextRisk,
+          riskLevel: getRiskLevel(nextRisk),
+          pendingEvents: nextPending,
+          activeDailyEvents: remainingEvents,
+          activeGameEvent: remainingEvents[0] || null,
+          eventConsequences: [
+            ...state.eventConsequences,
+            { id: crypto.randomUUID(), icon: activeEvent.icon, title: activeEvent.title, summary },
+          ].slice(-8),
+          ...getGameOverPatch(state, nextWallet, nextSavings),
+        });
+      },
+
+      applyInvestmentPreview: (days: number | null) => {
+        set({ investmentPreviewDays: days });
       },
 
       // Screen navigation

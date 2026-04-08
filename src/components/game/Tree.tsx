@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
 import { Button, Card } from "@/components/ui";
 import { canWaterTree, calculateTreeYield } from "@/lib/gameEngine";
@@ -35,11 +36,15 @@ export function Tree() {
 
   // Tree emoji based on health
   const getTreeEmoji = () => {
+    if (tree.health > 95) return "🌟";
     if (tree.health > 80) return "🌳";
     if (tree.health > 50) return "🌲";
     if (tree.health > 25) return "🪵";
     return "🥀";
   };
+
+  const healthVariant =
+    tree.health > 85 ? "golden" : tree.health > 45 ? "healthy" : "stressed";
 
   return (
     <Card className="text-center relative overflow-hidden">
@@ -54,11 +59,18 @@ export function Tree() {
 
       <div className="relative z-10">
         {/* Tree Display */}
-        <div
+        <motion.div
+          variants={{
+            healthy: { scale: 1, filter: "drop-shadow(0 0 12px rgba(34,197,94,0.45))" },
+            stressed: { scale: [1, 0.98, 1], filter: "saturate(0.75)" },
+            golden: { scale: [1, 1.05, 1], filter: "drop-shadow(0 0 18px rgba(234,179,8,0.65))" },
+          }}
+          animate={healthVariant}
+          transition={{ duration: 0.5, repeat: healthVariant === "golden" ? Infinity : 0 }}
           className={`text-8xl mb-4 transition-transform duration-300 ${isWatering ? "scale-110" : ""}`}
         >
           {getTreeEmoji()}
-        </div>
+        </motion.div>
 
         {/* Water animation */}
         {isWatering && (
