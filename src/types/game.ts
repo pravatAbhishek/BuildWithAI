@@ -8,10 +8,11 @@ export type SaplingStage =
   | "medium"
   | "large"
   | "full";
-export type GameScreen = "play" | "shop" | "end-day" | "bank" | "invest";
+export type GameScreen = "menu" | "play" | "shop" | "end-day" | "bank" | "invest";
 export type WeatherEvent = "none" | "rain" | "drought" | "storm";
 export type EventOutcomeQuality = "weak" | "balanced" | "strong" | "neutral";
 export type RiskLevel = "low" | "medium" | "high";
+export type ReviewStatus = "idle" | "loading" | "ready" | "error";
 
 export interface Player {
   id: string;
@@ -130,6 +131,79 @@ export interface DailyLesson {
   improvements?: string[]; // What could be better
 }
 
+export interface DailyDecision {
+  id: string;
+  day: number;
+  eventId: string;
+  eventTitle: string;
+  choiceId: string;
+  choiceLabel: string;
+  walletDelta: number;
+  savingsDelta: number;
+  investmentDelta: number;
+  treeHealthDelta: number;
+  riskDelta: number;
+  consequenceSummary: string;
+  wasTemptationAccepted: boolean;
+}
+
+export interface InflationRate {
+  day: number;
+  rate: number;
+  cashPowerLoss: number;
+}
+
+export interface DailySummary {
+  id: string;
+  currentDay: number;
+  decisions: DailyDecision[];
+  treeHealth: number;
+  walletBalance: number;
+  savingsBalance: number;
+  bankBalance: number;
+  investmentBalance: number;
+  fixedDeposits: Array<{ id: string; principal: number; maturityDay: number; matured: boolean }>;
+  sips: Array<{ id: string; amount: number; intervalDays: number; totalInvested: number; currentValue: number; isActive: boolean }>;
+  assetsOwned: Array<{ id: string; name: string; type: AssetType; currentValue: number }>;
+  inflation: InflationRate;
+  pendingConsequences: PendingEvent[];
+  temptationsAccepted: string[];
+  savedToday: number;
+  investedToday: number;
+  spentToday: number;
+  maintenancePaid: number;
+  weather: WeatherEvent;
+  riskLevel: RiskLevel;
+}
+
+export interface GeminiReview {
+  day: number;
+  summary: string;
+  exp: number;
+  suggestedQuestions: string[];
+  model?: string;
+}
+
+export interface GeminiChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface PlayerLevel {
+  level: number;
+  totalEXP: number;
+  expForNextLevel: number;
+}
+
+export interface LeaderboardEntry {
+  id: string;
+  name: string;
+  level: number;
+  score: number;
+  trend: "up" | "down" | "steady";
+}
+
 export interface EventChoiceConsequence {
   walletDelta?: number;
   savingsDelta?: number;
@@ -163,6 +237,7 @@ export interface PendingEvent {
   id: string;
   eventId: string;
   executeOnDay: number;
+  reason?: string;
 }
 
 export interface TreeHealth {
@@ -213,6 +288,8 @@ export interface StormEmergency {
 
 export interface GameState {
   player: Player;
+  playerLevel: number;
+  totalEXP: number;
   tree: Tree;
   savings: SavingsAccount;
   fixedDeposits: FixedDeposit[];
@@ -220,6 +297,15 @@ export interface GameState {
   ownedAssets: Asset[];
   marketAssets: MarketAsset[];
   lessons: DailyLesson[];
+  dailySummaries: DailySummary[];
+  dailyDecisionLog: DailyDecision[];
+  latestGeminiReview: GeminiReview | null;
+  reviewChatMessages: GeminiChatMessage[];
+  reviewStatus: ReviewStatus;
+  reviewError: string | null;
+  lastAwardedReviewDay: number;
+  leaderboard: LeaderboardEntry[];
+  hasPlayed: boolean;
   currentDay: number;
   treeHealth: TreeHealth;
   riskMeter: number;
@@ -243,6 +329,8 @@ export interface GameState {
   lastCoinAmount: number;
   currentWeather: WeatherEvent;
   weatherIntensity: number;
+  currentInflationRate: number;
+  inflationImpactToday: number;
   activeStormEmergency: StormEmergency | null;
   showStormEmergency: boolean;
   dayStartTotalEarnings: number;
@@ -274,6 +362,8 @@ export interface GameState {
 }
 
 export interface GameActions {
+  startJourney: () => void;
+
   // Tree actions
   waterTree: () => void;
   buyWater: (units: number) => void;
@@ -305,6 +395,13 @@ export interface GameActions {
   advanceDay: () => void;
   handleEventChoice: (choiceId: string) => void;
   applyInvestmentPreview: (days: number | null) => void;
+  buildDailySummary: () => DailySummary;
+  setGeminiReview: (review: GeminiReview) => void;
+  setReviewStatus: (status: ReviewStatus, error?: string | null) => void;
+  addReviewChatMessage: (message: GeminiChatMessage) => void;
+  clearReviewChatMessages: () => void;
+  setHasPlayed: (value: boolean) => void;
+  refreshLeaderboard: () => void;
 
   // Screen navigation
   setScreen: (screen: GameScreen) => void;

@@ -8,20 +8,30 @@ import { useGameStore } from "@/store/gameStore";
 import { WEATHER_TIPS } from "./WeatherManager";
 import { useState } from "react";
 
-export const WeatherOverlay = () => {
+type WeatherOverlayProps = {
+  suppressUi?: boolean;
+};
+
+export const WeatherOverlay = ({ suppressUi = false }: WeatherOverlayProps) => {
   const {
     currentWeather,
     weatherIntensity,
     player,
     payWeatherCharge,
     activeStormEmergency,
-    showStormEmergency,
-    dismissStormEmergency,
   } = useGameStore();
   const [dismissedTips, setDismissedTips] = useState<Record<string, boolean>>({});
 
-  const showTip = currentWeather !== "none" && !dismissedTips[currentWeather];
+  const showTip = !suppressUi && currentWeather !== "none" && !dismissedTips[currentWeather];
   const tip = WEATHER_TIPS[currentWeather as keyof typeof WEATHER_TIPS];
+  const stormEmergencySummary =
+    currentWeather === "storm" && activeStormEmergency
+      ? `Emergency charge applied: \u20b9${activeStormEmergency.cost} (Wallet: \u20b9${activeStormEmergency.fromWallet}, Savings: \u20b9${activeStormEmergency.fromSavings}${
+          activeStormEmergency.deficit > 0
+            ? `, Debt: \u20b9${activeStormEmergency.deficit}`
+            : ""
+        }).`
+      : null;
 
   return (
     <>
@@ -52,6 +62,11 @@ export const WeatherOverlay = () => {
             <div className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-4 rounded-lg shadow-lg max-w-md">
               <h3 className="font-bold text-lg mb-2">{tip.title}</h3>
               <p className="text-sm mb-4">{tip.message}</p>
+              {stormEmergencySummary && (
+                <p className="text-xs mb-4 rounded-md bg-black/20 px-3 py-2">
+                  {stormEmergencySummary}
+                </p>
+              )}
               <button
                 onClick={() =>
                   setDismissedTips((prev) => ({
@@ -69,7 +84,7 @@ export const WeatherOverlay = () => {
       </AnimatePresence>
 
       <AnimatePresence>
-        {currentWeather !== "none" && (
+        {!suppressUi && currentWeather !== "none" && currentWeather !== "storm" && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -87,7 +102,6 @@ export const WeatherOverlay = () => {
                     <h4 className="text-xl font-bold text-slate-900">
                       {currentWeather === "rain" && "Rain Event"}
                       {currentWeather === "drought" && "Drought Event"}
-                      {currentWeather === "storm" && "Storm Event"}
                     </h4>
                   </div>
                   {currentWeather === "rain" && (
@@ -102,8 +116,6 @@ export const WeatherOverlay = () => {
                     "Rain boosts your watering income by 1% today because your savings are strong."}
                   {currentWeather === "drought" &&
                     "Drought is a guaranteed challenge day. Earnings are reduced by 25% and this event cannot be removed using money."}
-                  {currentWeather === "storm" &&
-                    "Storm creates emergency spending pressure. Keep emergency funds so sudden costs do not push your net worth negative."}
                 </p>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
@@ -116,9 +128,7 @@ export const WeatherOverlay = () => {
                     </button>
                   ) : (
                     <div className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
-                      {currentWeather === "drought"
-                        ? "Drought cannot be cleared with money"
-                        : "Storm emergency is already applied"}
+                      Drought cannot be cleared with money
                     </div>
                   )}
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -126,46 +136,6 @@ export const WeatherOverlay = () => {
                   </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showStormEmergency && activeStormEmergency && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4"
-          >
-            <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
-              <h3 className="text-2xl font-bold text-slate-900">{activeStormEmergency.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                {activeStormEmergency.description}
-              </p>
-
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                <p className="font-semibold text-slate-800">Emergency Cost: ₹{activeStormEmergency.cost}</p>
-                <p className="mt-1 text-slate-600">Paid from wallet: ₹{activeStormEmergency.fromWallet}</p>
-                <p className="text-slate-600">Paid from savings: ₹{activeStormEmergency.fromSavings}</p>
-                {activeStormEmergency.deficit > 0 && (
-                  <p className="mt-1 font-semibold text-red-600">
-                    Uncovered amount (debt): ₹{activeStormEmergency.deficit}
-                  </p>
-                )}
-              </div>
-
-              <p className="mt-4 text-sm text-indigo-700">
-                Lesson: keep emergency funds in savings so sudden expenses do not damage your long-term progress.
-              </p>
-
-              <button
-                onClick={dismissStormEmergency}
-                className="mt-5 inline-flex w-full items-center justify-center rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700"
-              >
-                Continue
-              </button>
             </div>
           </motion.div>
         )}

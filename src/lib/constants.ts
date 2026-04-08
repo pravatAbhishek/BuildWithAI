@@ -4,8 +4,8 @@ import type { Event } from "@/types/game";
 
 export const GAME_CONFIG = {
   // Starting values
-  INITIAL_MONEY: 0, // Start with zero balance
-  INITIAL_WATER: 10, // Start with 10 water drops
+  INITIAL_MONEY: 100,
+  INITIAL_WATER: 5,
 
   // Water mechanics - updated pricing
   WATER_COST_SINGLE: 100, // Cost for 1 water drop
@@ -60,43 +60,264 @@ export const GAME_CONFIG = {
   MAX_EVENTS_PER_DAY: 3,
   TEMPTATION_SAVINGS_THRESHOLD: 300,
   MORNING_PHASE_DURATION_MS: 30000,
+  LEVEL_EXP_PER_LEVEL: 200,
+  INFLATION_RATE_MIN: 0.003,
+  INFLATION_RATE_MAX: 0.008,
+  DAILY_SUMMARY_STORAGE_KEY: "growtopia-daily-summaries",
 } as const;
 
 export const EVENT_TEMPLATES: Event[] = [
   {
-    id: "sneaker-flash",
-    title: "Limited Sneakers",
-    icon: "👟",
+    id: "asset-discount",
+    title: "Asset Discount!",
+    icon: "🏷️",
     type: "temptation",
-    probability: 0.12,
+    probability: 0.14,
+    minDay: 2,
     choices: [
       {
-        id: "take",
-        label: "Take Offer",
-        icon: "✨",
-        consequence: { walletDelta: -150, riskDelta: 20, scheduleEventId: "sneaker-break", scheduleAfterDays: 2 },
+        id: "buy-discount",
+        label: "Buy now at 30% off",
+        icon: "🔥",
+        consequence: {
+          walletDelta: -280,
+          investmentDelta: 80,
+          riskDelta: 10,
+          scheduleEventId: "asset-maintenance-shock",
+          scheduleAfterDays: 2,
+        },
       },
-      { id: "skip", label: "Ignore", icon: "🌱", consequence: { treeHealthDelta: 4, riskDelta: -4 } },
+      {
+        id: "wait-plan",
+        label: "Skip and keep buffer",
+        icon: "🧠",
+        consequence: { treeHealthDelta: 4, riskDelta: -4 },
+      },
     ],
   },
   {
-    id: "sneaker-break",
-    title: "Sneakers Broke",
+    id: "asset-maintenance-shock",
+    title: "Maintenance Shock",
+    icon: "🧾",
+    type: "loss",
+    probability: 0,
+    choices: [
+      {
+        id: "pay-fee",
+        label: "Pay maintenance fee",
+        icon: "💸",
+        consequence: { walletDelta: -210, treeHealthDelta: -10, riskDelta: 8 },
+      },
+    ],
+  },
+  {
+    id: "quick-fd-bonus",
+    title: "Quick FD Bonus",
+    icon: "🔒",
+    type: "temptation",
+    probability: 0.11,
+    minDay: 2,
+    choices: [
+      {
+        id: "lock-cash",
+        label: "Lock money for bonus",
+        icon: "⚡",
+        consequence: {
+          walletDelta: -180,
+          investmentDelta: 240,
+          treeHealthDelta: 7,
+          scheduleEventId: "liquidity-crunch",
+          scheduleAfterDays: 3,
+        },
+      },
+      {
+        id: "keep-liquid",
+        label: "Keep funds flexible",
+        icon: "🪙",
+        consequence: { riskDelta: -2, treeHealthDelta: 2 },
+      },
+    ],
+  },
+  {
+    id: "liquidity-crunch",
+    title: "Liquidity Crunch",
+    icon: "🥶",
+    type: "loss",
+    probability: 0,
+    choices: [
+      {
+        id: "cover-gap",
+        label: "Cover urgent expense",
+        icon: "🚨",
+        consequence: { walletDelta: -170, savingsDelta: -50, treeHealthDelta: -8, riskDelta: 8 },
+      },
+    ],
+  },
+  {
+    id: "delay-payment-offer",
+    title: "Delay Payment Offer",
+    icon: "🗓️",
+    type: "temptation",
+    probability: 0.13,
+    minDay: 2,
+    choices: [
+      {
+        id: "delay-bill",
+        label: "Delay bill and keep cash now",
+        icon: "😮",
+        consequence: {
+          walletDelta: 90,
+          riskDelta: 16,
+          scheduleEventId: "delayed-bill-penalty",
+          scheduleAfterDays: 2,
+        },
+      },
+      {
+        id: "pay-now",
+        label: "Pay now and stay safe",
+        icon: "✅",
+        consequence: { walletDelta: -90, riskDelta: -3, treeHealthDelta: 2 },
+      },
+    ],
+  },
+  {
+    id: "delayed-bill-penalty",
+    title: "Delayed Bill Penalty",
+    icon: "📬",
+    type: "loss",
+    probability: 0,
+    choices: [
+      {
+        id: "pay-with-penalty",
+        label: "Pay delayed bill (+15%)",
+        icon: "💸",
+        consequence: { walletDelta: -104, treeHealthDelta: -6, riskDelta: 8 },
+      },
+    ],
+  },
+  {
+    id: "risky-trade",
+    title: "Risky Trade",
+    icon: "📉",
+    type: "temptation",
+    probability: 0.1,
+    minDay: 3,
+    choices: [
+      {
+        id: "go-all-in",
+        label: "Take high-risk trade",
+        icon: "🎲",
+        consequence: {
+          walletDelta: -140,
+          investmentDelta: 210,
+          riskDelta: 18,
+          scheduleEventId: "risky-trade-crash",
+          scheduleAfterDays: 1,
+        },
+      },
+      {
+        id: "pass",
+        label: "Skip risky trade",
+        icon: "🛡️",
+        consequence: { treeHealthDelta: 3, riskDelta: -4 },
+      },
+    ],
+  },
+  {
+    id: "risky-trade-crash",
+    title: "Trade Crash",
     icon: "💥",
     type: "loss",
     probability: 0,
-    choices: [{ id: "pay", label: "Pay Repair", icon: "💸", consequence: { walletDelta: -200, treeHealthDelta: -15, riskDelta: 10 } }],
+    choices: [
+      {
+        id: "absorb-loss",
+        label: "Absorb crash loss",
+        icon: "📉",
+        consequence: { walletDelta: -220, treeHealthDelta: -12, riskDelta: 12 },
+      },
+    ],
   },
-  { id: "phone-bill", title: "Phone Bill Surprise", icon: "📱", type: "loss", probability: 0.1, choices: [{ id: "pay", label: "Pay Bill", icon: "💸", consequence: { walletDelta: -120 } }, { id: "delay", label: "Delay", icon: "⚠️", consequence: { treeHealthDelta: -20, riskDelta: 10 } }] },
-  { id: "healthy-gift", title: "Healthy Tree Gift", icon: "🎁", type: "reward", probability: 0.08, choices: [{ id: "accept", label: "Take Gift", icon: "💧", consequence: { rewardWater: 3, treeHealthDelta: 5, riskDelta: -5 } }] },
-  { id: "fd-tease", title: "FD Growth Preview", icon: "🔒", type: "invest", probability: 0.09, choices: [{ id: "invest", label: "Lock FD", icon: "🌳", consequence: { walletDelta: -100, investmentDelta: 120, treeHealthDelta: 6 } }, { id: "hold", label: "Not Now", icon: "👀", consequence: { riskDelta: 2 } }] },
-  { id: "market-dip", title: "Market Dip", icon: "📉", type: "market", probability: 0.08, choices: [{ id: "hold", label: "Hold", icon: "🧠", consequence: { treeHealthDelta: 2 } }, { id: "panic", label: "Panic Sell", icon: "😵", consequence: { walletDelta: -80, riskDelta: 8 } }] },
-  { id: "street-food", title: "Street Food Buzz", icon: "🍟", type: "temptation", probability: 0.08, choices: [{ id: "buy", label: "Buy Now", icon: "😋", consequence: { walletDelta: -80, riskDelta: 8 } }, { id: "skip", label: "Skip", icon: "👍", consequence: { treeHealthDelta: 3, riskDelta: -3 } }] },
-  { id: "festival", title: "Festival Spend", icon: "🎉", type: "temptation", probability: 0.08, choices: [{ id: "big", label: "Big Spend", icon: "🔥", consequence: { walletDelta: -180, riskDelta: 12 } }, { id: "small", label: "Small Spend", icon: "🙂", consequence: { walletDelta: -60, riskDelta: 2 } }, { id: "save", label: "Save", icon: "💰", consequence: { treeHealthDelta: 4, riskDelta: -4 } }] },
-  { id: "water-bonus", title: "Rain Barrel Found", icon: "🪣", type: "reward", probability: 0.07, choices: [{ id: "collect", label: "Collect", icon: "💧", consequence: { rewardWater: 5, riskDelta: -4 } }] },
-  { id: "bike-repair", title: "Bike Repair", icon: "🚲", type: "loss", probability: 0.07, choices: [{ id: "fix", label: "Fix", icon: "🛠️", consequence: { walletDelta: -90 } }, { id: "ignore", label: "Ignore", icon: "❌", consequence: { treeHealthDelta: -10, riskDelta: 8 } }] },
-  { id: "sip-nudge", title: "Tiny SIP?", icon: "📊", type: "invest", probability: 0.07, choices: [{ id: "start", label: "Start SIP", icon: "🌱", consequence: { walletDelta: -50, investmentDelta: 65, treeHealthDelta: 4 } }, { id: "later", label: "Later", icon: "⏳", consequence: { riskDelta: 2 } }] },
-  { id: "school-trip", title: "School Trip", icon: "🚌", type: "temptation", probability: 0.08, choices: [{ id: "premium", label: "Premium", icon: "⭐", consequence: { walletDelta: -140, riskDelta: 9 } }, { id: "budget", label: "Budget", icon: "✅", consequence: { walletDelta: -70 } }, { id: "skip", label: "Skip", icon: "💪", consequence: { treeHealthDelta: 3, riskDelta: -2 } }] },
+  {
+    id: "course-bundle",
+    title: "Skill Course Bundle",
+    icon: "🎓",
+    type: "temptation",
+    probability: 0.09,
+    minDay: 2,
+    choices: [
+      {
+        id: "buy-bundle",
+        label: "Buy all courses now",
+        icon: "📚",
+        consequence: {
+          walletDelta: -160,
+          treeHealthDelta: 5,
+          riskDelta: 6,
+          scheduleEventId: "subscription-renewal",
+          scheduleAfterDays: 3,
+        },
+      },
+      {
+        id: "buy-one",
+        label: "Pick one affordable course",
+        icon: "✅",
+        consequence: { walletDelta: -60, treeHealthDelta: 3, riskDelta: -1 },
+      },
+    ],
+  },
+  {
+    id: "subscription-renewal",
+    title: "Auto-Renewal Charge",
+    icon: "🔁",
+    type: "loss",
+    probability: 0,
+    choices: [
+      {
+        id: "pay-renewal",
+        label: "Pay renewal fee",
+        icon: "💳",
+        consequence: { walletDelta: -130, riskDelta: 6, treeHealthDelta: -4 },
+      },
+    ],
+  },
+  {
+    id: "safe-sip-nudge",
+    title: "Steady SIP Boost",
+    icon: "📊",
+    type: "invest",
+    probability: 0.08,
+    minDay: 2,
+    choices: [
+      {
+        id: "start-steady",
+        label: "Start a steady SIP",
+        icon: "🌱",
+        consequence: { walletDelta: -80, investmentDelta: 95, treeHealthDelta: 4, riskDelta: -2 },
+      },
+      {
+        id: "later",
+        label: "Later",
+        icon: "⏳",
+        consequence: { riskDelta: 2 },
+      },
+    ],
+  },
+  {
+    id: "emergency-grant",
+    title: "Emergency Grant",
+    icon: "🎁",
+    type: "reward",
+    probability: 0.06,
+    choices: [
+      {
+        id: "take-grant",
+        label: "Take support grant",
+        icon: "🧯",
+        consequence: { walletDelta: 90, rewardWater: 2, riskDelta: -6, treeHealthDelta: 3 },
+      },
+    ],
+  },
 ];
 
 export const MARKET_ASSETS = [

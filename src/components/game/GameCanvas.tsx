@@ -79,7 +79,6 @@ export function GameCanvas() {
     resetGame,
     aiTip,
     showBankModal,
-    toggleBankModal,
     activeSuddenEvent,
     showSuddenEvent,
     resolveSuddenEvent,
@@ -89,6 +88,7 @@ export function GameCanvas() {
     eventConsequences,
     maintenanceChargesToday,
     showMaintenancePopup,
+    showLesson,
     dismissMaintenancePopup,
     isGameOver,
     gameOverReason,
@@ -105,10 +105,51 @@ export function GameCanvas() {
   const morningAwardRef = useRef<number>(0);
 
   const wateringsLeft = Math.max(0, 3 - tree.timesWateredToday);
+  const isModalBlockingMorningFlow =
+    shopOpen ||
+    missionsOpen ||
+    inventoryOpen ||
+    showBankModal ||
+    showSuddenEvent ||
+    showMaintenancePopup ||
+    showLesson;
+  const suppressWeatherUi =
+    phase !== "morning" || isModalBlockingMorningFlow || Boolean(activeGameEvent) || isGameOver;
+  const closeBankPanel = () => {
+    useGameStore.setState({ showBankModal: false });
+  };
+  const closeMorningPanels = () => {
+    setShopOpen(false);
+    setMissionsOpen(false);
+    setInventoryOpen(false);
+    closeBankPanel();
+  };
+  const openMorningPanel = (panel: "shop" | "missions" | "inventory" | "bank") => {
+    if (phase !== "morning" || showSuddenEvent || isGameOver || showLesson) return;
+
+    closeMorningPanels();
+
+    if (panel === "shop") {
+      setShopOpen(true);
+      return;
+    }
+
+    if (panel === "missions") {
+      setMissionsOpen(true);
+      return;
+    }
+
+    if (panel === "inventory") {
+      setInventoryOpen(true);
+      return;
+    }
+
+    useGameStore.setState({ showBankModal: true });
+  };
   const canWater =
     canWaterTree(tree, player.waterUnits) &&
     phase === "morning" &&
-    !showSuddenEvent &&
+    !isModalBlockingMorningFlow &&
     !isGameOver;
 
   const bgClass = useMemo(() => {
@@ -155,7 +196,7 @@ export function GameCanvas() {
   }, [currentDay, ownedAssets, player.investmentBalance, riskMeter, tree]);
 
   useEffect(() => {
-    if (phase !== "morning" || isGameOver) return;
+    if (phase !== "morning" || isGameOver || isModalBlockingMorningFlow) return;
     const interval = window.setInterval(() => {
       const autoYield = Math.floor(
         calculateTreeYield(
@@ -177,19 +218,40 @@ export function GameCanvas() {
       window.setTimeout(() => setCoinPop(null), 900);
     }, 4500);
     const timeout = window.setTimeout(
-      () => setPhase("events"),
+      () => {
+        setShopOpen(false);
+        setMissionsOpen(false);
+        setInventoryOpen(false);
+        useGameStore.setState({ showBankModal: false });
+        setPhase("events");
+      },
       GAME_CONFIG.MORNING_PHASE_DURATION_MS,
     );
     return () => {
       window.clearInterval(interval);
       window.clearTimeout(timeout);
     };
-  }, [phase, isGameOver, tree, ownedAssets, currentDay, player.investmentBalance, riskMeter]);
+  }, [
+    phase,
+    isGameOver,
+    isModalBlockingMorningFlow,
+    tree,
+    ownedAssets,
+    currentDay,
+    player.investmentBalance,
+    riskMeter,
+  ]);
 
   useEffect(() => {
     if (phase !== "events" || isGameOver) return;
     if (!activeGameEvent && activeDailyEvents.length === 0) {
-      const timeout = window.setTimeout(() => setPhase("evening"), 1000);
+      const timeout = window.setTimeout(() => {
+        setShopOpen(false);
+        setMissionsOpen(false);
+        setInventoryOpen(false);
+        useGameStore.setState({ showBankModal: false });
+        setPhase("evening");
+      }, 1000);
       return () => window.clearTimeout(timeout);
     }
   }, [phase, activeGameEvent, activeDailyEvents.length, isGameOver]);
@@ -267,9 +329,7 @@ export function GameCanvas() {
     setPhase("sunrise");
     window.setTimeout(() => {
       advanceDay();
-      setShopOpen(false);
-      setMissionsOpen(false);
-      setInventoryOpen(false);
+      closeMorningPanels();
       setPhase("morning");
     }, 1200);
   };
@@ -277,7 +337,7 @@ export function GameCanvas() {
   return (
     <>
       <WeatherManager />
-      <WeatherOverlay />
+      <WeatherOverlay suppressUi={suppressWeatherUi} />
       <DailyLesson />
       <div
         className={`relative h-screen w-full overflow-hidden bg-gradient-to-b ${bgClass} transition-all duration-1000 ease-in-out`}
@@ -291,14 +351,18 @@ export function GameCanvas() {
           savings={savings.balance}
           riskMeter={riskMeter}
           riskLevel={riskLevel}
-          onBankClick={toggleBankModal}
+          onBankClick={() => openMorningPanel("bank")}
         />
 
         {/* Reset Button with rotation */}
         <motion.button
           whileHover={{ scale: 1.1, rotate: 180 }}
           whileTap={{ scale: 0.9 }}
-          onClick={() => resetGame()}
+          onClick={() => {
+            closeMorningPanels();
+            setPhase("morning");
+            resetGame();
+          }}
           className="absolute top-4 right-4 z-40 w-12 h-12 rounded-full bg-gradient-to-br from-red-500 to-red-700 text-white shadow-lg flex items-center justify-center text-xl hover:shadow-red-500/50 hover:shadow-xl transition-shadow"
         >
           🔄
@@ -409,12 +473,21 @@ export function GameCanvas() {
         <AnimatePresence>
           {phase === "morning" && (
             <BottomActions
-              canEndDay={tree.timesWateredToday > 0 && !showSuddenEvent && !isGameOver}
-              onShop={() => !showSuddenEvent && !isGameOver && setShopOpen(true)}
-              onEndDay={() => !showSuddenEvent && !isGameOver && setPhase("events")}
-              onBank={() => !showSuddenEvent && !isGameOver && toggleBankModal()}
-              onMissions={() => setMissionsOpen(true)}
-              onInventory={() => setInventoryOpen(true)}
+              canEndDay={
+                tree.timesWateredToday > 0 &&
+                !showSuddenEvent &&
+                !isGameOver &&
+                !isModalBlockingMorningFlow
+              }
+              onShop={() => openMorningPanel("shop")}
+              onEndDay={() => {
+                if (isModalBlockingMorningFlow) return;
+                closeMorningPanels();
+                setPhase("events");
+              }}
+              onBank={() => openMorningPanel("bank")}
+              onMissions={() => openMorningPanel("missions")}
+              onInventory={() => openMorningPanel("inventory")}
             />
           )}
         </AnimatePresence>
@@ -438,12 +511,12 @@ export function GameCanvas() {
         {/* Quick Bank Access Modal */}
         <AnimatePresence>
           {showBankModal && phase === "morning" && !showSuddenEvent && !isGameOver && (
-            <QuickBankModal onClose={toggleBankModal} />
+            <QuickBankModal onClose={closeBankPanel} />
           )}
         </AnimatePresence>
 
         <AnimatePresence>
-          {showSuddenEvent && activeSuddenEvent && (
+          {showSuddenEvent && activeSuddenEvent && !showLesson && phase === "morning" && (
             <SuddenEventModal
               event={activeSuddenEvent}
               onSelect={resolveSuddenEvent}
@@ -472,12 +545,16 @@ export function GameCanvas() {
         </AnimatePresence>
 
         <AnimatePresence>
-          {showMaintenancePopup && maintenanceChargesToday.length > 0 && (
+          {showMaintenancePopup &&
+            maintenanceChargesToday.length > 0 &&
+            !showLesson &&
+            !showSuddenEvent &&
+            phase === "morning" && (
             <MaintenancePopup
               charges={maintenanceChargesToday}
               onClose={dismissMaintenancePopup}
             />
-          )}
+            )}
         </AnimatePresence>
 
         <AnimatePresence>
@@ -485,7 +562,11 @@ export function GameCanvas() {
             <GameOverOverlay
               reason={gameOverReason}
               netWorth={netWorth}
-              onRestart={resetGame}
+              onRestart={() => {
+                closeMorningPanels();
+                setPhase("morning");
+                resetGame();
+              }}
             />
           )}
         </AnimatePresence>

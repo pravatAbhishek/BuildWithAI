@@ -67,7 +67,7 @@ These are the **actual configured values**:
 |---|---|
 | `GameCanvas.tsx` | **Primary game screen** and flow orchestration (morning → evening → night → sunrise) |
 | `WeatherManager.tsx` | Weather state/event handling bridge |
-| `WeatherOverlay.tsx` | Renders weather effects over the scene |
+| `WeatherOverlay.tsx` | Renders weather effects + compact weather notifications (storm charge summary appears here) |
 | `RainEffect.tsx` / `StormEffect.tsx` / `DroughtEffect.tsx` | Individual weather visuals |
 | `GameHUD.tsx` | Legacy HUD UI |
 | `Tree.tsx` | Legacy tree interaction UI |
@@ -135,6 +135,36 @@ These are the **actual configured values**:
 
 ---
 
+## UI Layering and Modal Priority (Current)
+
+To avoid visual clashes, gameplay now follows strict display priority:
+
+1. Morning utility panels are single-open only: Shop, Quick Bank, Missions, and Inventory never stay open together.
+2. Morning auto-yield timer and automatic phase jump to events pause while blocking UI is open.
+3. Day-start overlays render in priority order:
+  - Daily lesson modal
+  - Sudden event modal
+  - Maintenance popup
+4. Weather notifications:
+  - Rain/Drought can use the active event card.
+  - Storm no longer shows a large emergency dialog.
+  - Storm emergency charges are auto-applied in state and summarized in the compact weather popup.
+
+---
+
+## Runtime Flow Snapshot
+
+Use this when giving precise implementation instructions:
+
+1. `src/app/page.tsx` renders `GameCanvas`.
+2. `src/components/game/GameCanvas.tsx` controls phase flow, panel visibility rules, and modal gating.
+3. `src/components/game/WeatherManager.tsx` decides daily weather and triggers store weather events.
+4. `src/store/gameStore.ts` applies financial outcomes (storm emergency cost settlement, savings/FD/SIP updates, event outcomes).
+5. `src/components/game/WeatherOverlay.tsx` handles weather effects and compact event notifications.
+6. `src/components/lesson/DailyLesson.tsx` displays the day summary modal.
+
+---
+
 ## “Which File Should I Edit?” Guide
 
 | If you want to change... | Primary file(s) |
@@ -148,6 +178,7 @@ These are the **actual configured values**:
 | Daily lesson/review content format | `src/store/gameStore.ts` + `src/components/lesson/DailyLesson.tsx` |
 | Banking panel UI | `src/components/banking/*` |
 | Weather visuals | `src/components/game/*Effect.tsx` + `WeatherOverlay.tsx` |
+| UI overlap / modal collision fixes | `src/components/game/GameCanvas.tsx` + `src/components/game/WeatherOverlay.tsx` |
 | Global animations/theme classes | `src/app/globals.css` |
 
 ---

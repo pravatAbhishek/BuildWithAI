@@ -6,6 +6,11 @@ import type {
   GameState,
   GameActions,
   DailyLesson,
+  DailySummary,
+  DailyDecision,
+  GeminiReview,
+  GeminiChatMessage,
+  LeaderboardEntry,
   MarketAsset,
   GameScreen,
   WeatherEvent,
@@ -49,6 +54,9 @@ import {
   generateDailyEvents,
   resolvePendingEvents,
   getRiskLevel,
+  buildPendingEvent,
+  isTemptationAccepted,
+  pickDailyInflationRate,
 } from "@/lib/eventSystem";
 
 const ENABLE_LEGACY_SUDDEN_EVENTS = false;
@@ -75,323 +83,26 @@ const AI_TIPS = {
 
 const SUDDEN_EVENTS: SuddenEvent[] = [
   {
-    id: "pocket-money-day",
-    title: "🎒 Pocket Money Day",
-    scenario: "You received ₹100 as pocket money.",
-    options: [
-      {
-        id: "snacks",
-        label: "Spend all on snacks 🍫",
-        walletDelta: 0,
-        quality: "weak",
-        treeHealthDelta: -2,
-        resultText: "Quick happiness, but no money was protected for emergencies.",
-      },
-      {
-        id: "save-all",
-        label: "Save all 💰",
-        walletDelta: 0,
-        savingsDelta: 100,
-        quality: "strong",
-        treeHealthDelta: 3,
-        resultText: "Strong discipline. Savings give long-term financial stability.",
-      },
-      {
-        id: "split",
-        label: "Spend ₹50, save ₹50",
-        walletDelta: 0,
-        savingsDelta: 50,
-        quality: "balanced",
-        treeHealthDelta: 1,
-        resultText: "Balanced choice. You enjoyed today and still saved for tomorrow.",
-      },
-    ],
-  },
-  {
-    id: "game-sale",
-    title: "🎮 Game Sale Temptation",
-    scenario: "A game is on sale for ₹80.",
-    options: [
-      {
-        id: "buy",
-        label: "Buy it",
-        walletDelta: -80,
-        quality: "weak",
-        treeHealthDelta: -3,
-        resultText: "Impulse buying reduced your future flexibility.",
-      },
-      {
-        id: "ignore",
-        label: "Ignore it",
-        walletDelta: 0,
-        quality: "strong",
-        treeHealthDelta: 3,
-        resultText: "Great restraint. Delayed gratification strengthens money habits.",
-      },
-      {
-        id: "later",
-        label: "Save for later purchase",
-        walletDelta: 0,
-        savingsDelta: 40,
-        quality: "balanced",
-        treeHealthDelta: 1,
-        resultText: "You avoided impulse and started planning for purchases.",
-      },
-    ],
-  },
-  {
-    id: "hungry-after-school",
-    title: "🍔 Hungry After School",
-    scenario: "You are hungry after school.",
-    options: [
-      {
-        id: "food",
-        label: "Buy food (₹50)",
-        walletDelta: -50,
-        quality: "balanced",
-        treeHealthDelta: 2,
-        resultText: "Necessary spending is healthy when kept reasonable.",
-      },
-      {
-        id: "skip",
-        label: "Skip and save",
-        walletDelta: 0,
-        quality: "weak",
-        treeHealthDelta: -6,
-        resultText: "Over-saving at the cost of needs can backfire.",
-      },
-      {
-        id: "cheap",
-        label: "Buy cheaper option (₹20)",
-        walletDelta: -20,
-        quality: "strong",
-        treeHealthDelta: 4,
-        resultText: "Smart spending: need fulfilled with lower cost.",
-      },
-    ],
-  },
-  {
-    id: "broken-headphones",
-    title: "🎧 Broken Headphones",
-    scenario: "Your headphones broke (₹150 repair).",
-    options: [
-      {
-        id: "use-savings",
-        label: "Use savings",
-        walletDelta: 0,
-        savingsDelta: -150,
-        quality: "strong",
-        treeHealthDelta: 2,
-        resultText: "Emergency fund worked exactly as intended.",
-      },
-      {
-        id: "ignore",
-        label: "Ignore problem",
-        walletDelta: 0,
-        quality: "weak",
-        treeHealthDelta: -5,
-        resultText: "Ignoring maintenance often causes bigger losses later.",
-      },
-      {
-        id: "borrow",
-        label: "Borrow money",
-        walletDelta: -30,
-        quality: "balanced",
-        treeHealthDelta: -1,
-        resultText: "Borrowing solved now, but interest and instability increase future stress.",
-      },
-    ],
-  },
-  {
-    id: "birthday-party",
-    title: "🎉 Friend’s Birthday Party",
-    scenario: "Friend invites you to a party (₹200).",
-    options: [
-      {
-        id: "spend-all",
-        label: "Spend and go",
-        walletDelta: -200,
-        quality: "weak",
-        treeHealthDelta: -3,
-        resultText: "Full spending weakened your cash buffer.",
-      },
-      {
-        id: "skip-save",
-        label: "Skip and save",
-        walletDelta: 0,
-        savingsDelta: 100,
-        quality: "strong",
-        treeHealthDelta: 3,
-        resultText: "Financial strength increased by prioritizing savings.",
-      },
-      {
-        id: "spend-less",
-        label: "Spend less (₹100)",
-        walletDelta: -100,
-        quality: "balanced",
-        treeHealthDelta: 1,
-        resultText: "A budgeted social decision preserved part of your reserves.",
-      },
-    ],
-  },
-  {
-    id: "investment-opportunity",
-    title: "📈 Investment Opportunity",
-    scenario: "You can allocate ₹200 today.",
-    options: [
-      {
-        id: "invest",
-        label: "Invest (locked, higher return)",
-        walletDelta: -200,
-        investmentDelta: 200,
-        quality: "strong",
-        treeHealthDelta: 3,
-        resultText: "Strong long-term move. You traded liquidity for growth.",
-      },
-      {
-        id: "save",
-        label: "Save normally",
-        walletDelta: 0,
-        savingsDelta: 200,
-        quality: "balanced",
-        treeHealthDelta: 1,
-        resultText: "Safe and stable. Lower return, but strong liquidity.",
-      },
-      {
-        id: "spend",
-        label: "Spend instead",
-        walletDelta: -200,
-        quality: "weak",
-        treeHealthDelta: -4,
-        resultText: "Short-term spending weakened your future growth potential.",
-      },
-    ],
-  },
-  {
-    id: "flash-sale",
-    title: "⚡ Flash Sale Offer",
-    scenario: "Limited-time deal! Buy now.",
+    id: "legacy-budget-choice",
+    title: "📦 Budget Choice",
+    scenario: "A non-essential purchase appears. Choose discipline or instant reward.",
     options: [
       {
         id: "buy-now",
-        label: "Buy immediately",
-        walletDelta: -120,
+        label: "Buy now",
+        walletDelta: -90,
         quality: "weak",
         treeHealthDelta: -3,
-        resultText: "Impulsive buying hurt your emergency readiness.",
+        resultText: "Impulse spending lowered your safety margin.",
       },
       {
-        id: "skip",
-        label: "Think and skip",
+        id: "plan-first",
+        label: "Plan first and skip",
         walletDelta: 0,
+        savingsDelta: 70,
         quality: "strong",
         treeHealthDelta: 3,
-        resultText: "You protected your funds by avoiding pressure spending.",
-      },
-      {
-        id: "wait",
-        label: "Wait",
-        walletDelta: 0,
-        quality: "balanced",
-        treeHealthDelta: 1,
-        resultText: "Good pause. Decision quality improves when you slow down.",
-      },
-    ],
-  },
-  {
-    id: "sudden-rain-bonus",
-    title: "🌧️ Sudden Rain Bonus",
-    scenario: "You got a surprise bonus of ₹100.",
-    options: [
-      {
-        id: "bonus-spend",
-        label: "Spend",
-        walletDelta: 0,
-        quality: "weak",
-        treeHealthDelta: -1,
-        resultText: "Unexpected income disappeared quickly without improving stability.",
-      },
-      {
-        id: "bonus-save",
-        label: "Save",
-        walletDelta: 0,
-        savingsDelta: 100,
-        quality: "strong",
-        treeHealthDelta: 3,
-        resultText: "Excellent. Windfall money strengthened your emergency fund.",
-      },
-      {
-        id: "bonus-invest",
-        label: "Invest",
-        walletDelta: 0,
-        investmentDelta: 100,
-        quality: "strong",
-        treeHealthDelta: 3,
-        resultText: "Great long-term choice from unexpected money.",
-      },
-    ],
-  },
-  {
-    id: "new-phone-upgrade",
-    title: "📱 New Phone Upgrade",
-    scenario: "You want a new phone (₹500).",
-    options: [
-      {
-        id: "buy-phone",
-        label: "Buy now",
-        walletDelta: -500,
-        quality: "weak",
-        treeHealthDelta: -4,
-        resultText: "Large impulse purchase reduced your resilience.",
-      },
-      {
-        id: "save-phone",
-        label: "Save for it",
-        walletDelta: 0,
-        savingsDelta: 150,
-        quality: "strong",
-        treeHealthDelta: 2,
-        resultText: "Planned purchasing protects goals and avoids cash shocks.",
-      },
-      {
-        id: "ignore-phone",
-        label: "Ignore",
-        walletDelta: 0,
-        quality: "balanced",
-        treeHealthDelta: 1,
-        resultText: "Neutral choice with no immediate financial stress.",
-      },
-    ],
-  },
-  {
-    id: "school-emergency",
-    title: "📚 Emergency School Expense",
-    scenario: "School needs ₹100 urgently.",
-    options: [
-      {
-        id: "school-savings",
-        label: "Use savings",
-        walletDelta: 0,
-        savingsDelta: -100,
-        quality: "strong",
-        treeHealthDelta: 3,
-        resultText: "Savings protected you during an urgent need.",
-      },
-      {
-        id: "school-borrow",
-        label: "Borrow",
-        walletDelta: -130,
-        quality: "balanced",
-        treeHealthDelta: -1,
-        resultText: "Borrowing solved today, but repayment increased future burden.",
-      },
-      {
-        id: "school-cannot-pay",
-        label: "Cannot pay",
-        walletDelta: 0,
-        quality: "weak",
-        treeHealthDelta: -8,
-        resultText: "No emergency buffer caused a serious setback.",
+        resultText: "Good control protected your long-term progress.",
       },
     ],
   },
@@ -400,6 +111,43 @@ const SUDDEN_EVENTS: SuddenEvent[] = [
 function pickSuddenEvent(day: number): SuddenEvent {
   const index = (day * 7 + 3) % SUDDEN_EVENTS.length;
   return SUDDEN_EVENTS[index];
+}
+
+const LEADERBOARD_NAMES = ["Rahul", "Priya", "Aarav", "Ananya", "Kabir"];
+
+function calculateLevelFromExp(totalEXP: number): number {
+  return Math.floor(totalEXP / GAME_CONFIG.LEVEL_EXP_PER_LEVEL) + 1;
+}
+
+function createLeaderboard(playerLevel: number, totalEXP: number): LeaderboardEntry[] {
+  return LEADERBOARD_NAMES.map((name, index) => {
+    const levelShift = (index % 3) - 1;
+    const randomScoreNoise = Math.floor(Math.random() * 80);
+    const level = Math.max(1, playerLevel + levelShift + (index === 0 ? 1 : 0));
+    const score = Math.max(120, totalEXP + level * 90 + randomScoreNoise);
+    const trend: LeaderboardEntry["trend"] =
+      index % 3 === 0 ? "up" : index % 3 === 1 ? "steady" : "down";
+
+    return {
+      id: name.toLowerCase(),
+      name,
+      level,
+      score,
+      trend,
+    };
+  });
+}
+
+function appendDailySummaryToLocalStorage(summary: DailySummary) {
+  if (typeof window === "undefined") return;
+  try {
+    const key = GAME_CONFIG.DAILY_SUMMARY_STORAGE_KEY;
+    const current = window.localStorage.getItem(key);
+    const parsed = current ? (JSON.parse(current) as DailySummary[]) : [];
+    window.localStorage.setItem(key, JSON.stringify([...parsed, summary]));
+  } catch {
+    // Ignore localStorage write errors and keep game playable.
+  }
 }
 
 function calculateNetWorth(
@@ -589,59 +337,234 @@ function generateDailyLesson(state: GameState): DailyLesson {
   return lesson;
 }
 
-const initialState: GameState = {
-  player: createInitialPlayer(),
-  tree: createInitialTree(),
-  savings: createInitialSavings(),
-  fixedDeposits: [],
-  sips: [],
-  ownedAssets: [],
-  marketAssets: MARKET_ASSETS as MarketAsset[],
-  lessons: [],
-  currentDay: 1,
-  treeHealth: { value: 100 },
-  riskMeter: 0,
-  riskLevel: "low",
-  pendingEvents: [],
-  activeDailyEvents: [],
-  activeGameEvent: null,
-  eventConsequences: [],
-  investmentPreviewDays: null,
-  timeOfDay: "morning",
-  currentScreen: "play",
-  showWaterEffect: false,
-  showCoinEffect: false,
-  lastCoinAmount: 0,
-  currentWeather: "none",
-  weatherIntensity: 0,
-  activeStormEmergency: null,
-  showStormEmergency: false,
-  dayStartTotalEarnings: 0,
-  todayInvested: 0,
-  todayBankSaved: 0,
-  todaySavingsDeposited: 0,
-  activeSuddenEvent: null,
-  showSuddenEvent: false,
-  lastSuddenEventDay: 0,
-  eventHistory: [],
-  latestEventResolution: null,
-  maintenanceChargesToday: [],
-  showMaintenancePopup: false,
-  isGameOver: false,
-  gameOverReason: null,
-  stormChanceModifier: 0,
-  isPlaying: true,
-  showEndOfDay: false,
-  showLesson: false,
-  currentLesson: null,
-  aiTip: AI_TIPS.firstDay,
-  showBankModal: false,
-};
+function buildDailySummaryFromState(
+  state: GameState,
+  inflationRate: number,
+  inflationLoss: number,
+): DailySummary {
+  const decisions = state.dailyDecisionLog.filter(
+    (entry) => entry.day === state.player.currentDay,
+  );
+  const temptationsAccepted = decisions
+    .filter((entry) => entry.wasTemptationAccepted)
+    .map((entry) => entry.eventTitle);
+  const maintenancePaid = state.maintenanceChargesToday.reduce(
+    (sum, charge) => sum + charge.cost,
+    0,
+  );
+  const spentFromChoices = decisions.reduce((sum, entry) => {
+    const outgoing = Math.max(0, -entry.walletDelta) + Math.max(0, -entry.savingsDelta);
+    return sum + outgoing;
+  }, 0);
+
+  return {
+    id: createId(),
+    currentDay: state.player.currentDay,
+    decisions,
+    treeHealth: state.tree.health,
+    walletBalance: state.player.wallet,
+    savingsBalance: state.savings.balance,
+    bankBalance: state.player.bankBalance,
+    investmentBalance: state.player.investmentBalance,
+    fixedDeposits: state.fixedDeposits.map((fd) => ({
+      id: fd.id,
+      principal: fd.principal,
+      maturityDay: fd.maturityDay,
+      matured: fd.matured,
+    })),
+    sips: state.sips.map((sip) => ({
+      id: sip.id,
+      amount: sip.amount,
+      intervalDays: sip.intervalDays,
+      totalInvested: sip.totalInvested,
+      currentValue: sip.currentValue,
+      isActive: sip.isActive,
+    })),
+    assetsOwned: state.ownedAssets.map((asset) => ({
+      id: asset.id,
+      name: asset.name,
+      type: asset.type,
+      currentValue: asset.currentValue,
+    })),
+    inflation: {
+      day: state.player.currentDay,
+      rate: inflationRate,
+      cashPowerLoss: inflationLoss,
+    },
+    pendingConsequences: state.pendingEvents,
+    temptationsAccepted,
+    savedToday: state.todayBankSaved + state.todaySavingsDeposited,
+    investedToday: state.todayInvested,
+    spentToday: spentFromChoices + maintenancePaid + inflationLoss,
+    maintenancePaid,
+    weather: state.currentWeather,
+    riskLevel: state.riskLevel,
+  };
+}
+
+function createInitialState(): GameState {
+  return {
+    player: createInitialPlayer(),
+    playerLevel: 1,
+    totalEXP: 0,
+    tree: createInitialTree(),
+    savings: createInitialSavings(),
+    fixedDeposits: [],
+    sips: [],
+    ownedAssets: [],
+    marketAssets: MARKET_ASSETS as MarketAsset[],
+    lessons: [],
+    dailySummaries: [],
+    dailyDecisionLog: [],
+    latestGeminiReview: null,
+    reviewChatMessages: [],
+    reviewStatus: "idle",
+    reviewError: null,
+    lastAwardedReviewDay: 0,
+    leaderboard: createLeaderboard(1, 0),
+    hasPlayed: false,
+    currentDay: 1,
+    treeHealth: { value: 100 },
+    riskMeter: 0,
+    riskLevel: "low",
+    pendingEvents: [],
+    activeDailyEvents: [],
+    activeGameEvent: null,
+    eventConsequences: [],
+    investmentPreviewDays: null,
+    timeOfDay: "morning",
+    currentScreen: "menu",
+    showWaterEffect: false,
+    showCoinEffect: false,
+    lastCoinAmount: 0,
+    currentWeather: "none",
+    weatherIntensity: 0,
+    currentInflationRate: 0,
+    inflationImpactToday: 0,
+    activeStormEmergency: null,
+    showStormEmergency: false,
+    dayStartTotalEarnings: 0,
+    todayInvested: 0,
+    todayBankSaved: 0,
+    todaySavingsDeposited: 0,
+    activeSuddenEvent: null,
+    showSuddenEvent: false,
+    lastSuddenEventDay: 0,
+    eventHistory: [],
+    latestEventResolution: null,
+    maintenanceChargesToday: [],
+    showMaintenancePopup: false,
+    isGameOver: false,
+    gameOverReason: null,
+    stormChanceModifier: 0,
+    isPlaying: false,
+    showEndOfDay: false,
+    showLesson: false,
+    currentLesson: null,
+    aiTip: AI_TIPS.firstDay,
+    showBankModal: false,
+  };
+}
+
+const initialState: GameState = createInitialState();
 
 export const useGameStore = create<GameState & GameActions>()(
   persist(
     (set, get) => ({
       ...initialState,
+
+      startJourney: () => {
+        const state = get();
+        if (state.currentScreen === "play") return;
+
+        set({
+          currentScreen: "play",
+          isPlaying: true,
+          hasPlayed: true,
+          reviewStatus: "idle",
+          reviewError: null,
+          latestGeminiReview: null,
+          reviewChatMessages: [],
+          aiTip: AI_TIPS.firstDay,
+        });
+        get().refreshLeaderboard();
+      },
+
+      buildDailySummary: () => {
+        const state = get();
+        const lastSummary = state.dailySummaries[state.dailySummaries.length - 1];
+        if (lastSummary && lastSummary.currentDay === state.player.currentDay) {
+          return lastSummary;
+        }
+
+        const inflationRate = pickDailyInflationRate();
+        const inflationLoss = Math.floor(Math.max(0, state.player.wallet) * inflationRate);
+        const walletAfterInflation = state.player.wallet - inflationLoss;
+        const summary = buildDailySummaryFromState(state, inflationRate, inflationLoss);
+
+        set({
+          player: {
+            ...state.player,
+            wallet: walletAfterInflation,
+          },
+          dailySummaries: [...state.dailySummaries, summary],
+          currentInflationRate: inflationRate,
+          inflationImpactToday: inflationLoss,
+          reviewStatus: "loading",
+          reviewError: null,
+          latestGeminiReview: null,
+          reviewChatMessages: [],
+          ...getGameOverPatch(state, walletAfterInflation, state.savings.balance),
+        });
+
+        appendDailySummaryToLocalStorage(summary);
+        return summary;
+      },
+
+      setGeminiReview: (review: GeminiReview) => {
+        const state = get();
+        const clampedExp = Math.max(0, Math.min(100, Math.floor(review.exp)));
+        const shouldAward = state.lastAwardedReviewDay !== review.day;
+        const nextTotalEXP = shouldAward ? state.totalEXP + clampedExp : state.totalEXP;
+        const nextLevel = calculateLevelFromExp(nextTotalEXP);
+
+        set({
+          latestGeminiReview: {
+            ...review,
+            exp: clampedExp,
+          },
+          totalEXP: nextTotalEXP,
+          playerLevel: nextLevel,
+          lastAwardedReviewDay: shouldAward ? review.day : state.lastAwardedReviewDay,
+          reviewStatus: "ready",
+          reviewError: null,
+        });
+        get().refreshLeaderboard();
+      },
+
+      setReviewStatus: (status, error = null) => {
+        set({ reviewStatus: status, reviewError: error });
+      },
+
+      addReviewChatMessage: (message: GeminiChatMessage) => {
+        const state = get();
+        set({ reviewChatMessages: [...state.reviewChatMessages, message] });
+      },
+
+      clearReviewChatMessages: () => {
+        set({ reviewChatMessages: [] });
+      },
+
+      setHasPlayed: (value: boolean) => {
+        set({ hasPlayed: value });
+      },
+
+      refreshLeaderboard: () => {
+        const state = get();
+        set({
+          leaderboard: createLeaderboard(state.playerLevel, state.totalEXP),
+        });
+      },
 
       // Water the tree
       waterTree: () => {

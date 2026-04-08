@@ -4,11 +4,36 @@ import type { Event, GameState, PendingEvent } from "@/types/game";
 const EVENT_PROBABILITY_WEIGHT_MULTIPLIER = 10;
 const EVENT_COUNT_HIGH_RISK = 3;
 const EVENT_COUNT_NORMAL_RISK = 2;
+const EVENT_COUNT_LOW_RISK = 1;
 
 export function getRiskLevel(riskMeter: number) {
   if (riskMeter >= 70) return "high";
   if (riskMeter >= 35) return "medium";
   return "low";
+}
+
+export function pickDailyInflationRate(): number {
+  const min = GAME_CONFIG.INFLATION_RATE_MIN;
+  const max = GAME_CONFIG.INFLATION_RATE_MAX;
+  return Number((min + Math.random() * (max - min)).toFixed(4));
+}
+
+export function isTemptationAccepted(event: Event, choiceId: string): boolean {
+  if (event.type !== "temptation") return false;
+  const choice = event.choices.find((item) => item.id === choiceId);
+  return Boolean(choice?.consequence.scheduleEventId);
+}
+
+export function buildPendingEvent(eventId: string, executeOnDay: number, reason?: string): PendingEvent {
+  return {
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    eventId,
+    executeOnDay,
+    reason,
+  };
 }
 
 export function generateDailyEvents(state: Pick<GameState, "currentDay" | "riskMeter" | "savings">): Event[] {
@@ -26,7 +51,11 @@ export function generateDailyEvents(state: Pick<GameState, "currentDay" | "riskM
     1,
     Math.min(
       GAME_CONFIG.MAX_EVENTS_PER_DAY,
-      riskLevel === "high" ? EVENT_COUNT_HIGH_RISK : EVENT_COUNT_NORMAL_RISK,
+      riskLevel === "high"
+        ? EVENT_COUNT_HIGH_RISK
+        : riskLevel === "medium"
+          ? EVENT_COUNT_NORMAL_RISK
+          : EVENT_COUNT_LOW_RISK,
     ),
   );
 
