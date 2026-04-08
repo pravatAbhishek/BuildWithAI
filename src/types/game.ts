@@ -110,6 +110,9 @@ export interface GameState {
   lastCoinAmount: number;
   currentWeather: WeatherEvent;
   weatherIntensity: number;
+  dayStartTotalEarnings: number;
+  todayInvested: number;
+  todayBankSaved: number;
 
   // Game flow
   isPlaying: boolean;
@@ -125,6 +128,7 @@ export interface GameActions {
   buyWater: (units: number) => void;
   triggerWeatherEvent: (event: WeatherEvent) => void;
   clearWeatherEvent: () => void;
+  payWeatherCharge: () => void;
 
   // Banking actions
   depositToSavings: (amount: number) => void;

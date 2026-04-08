@@ -89,6 +89,9 @@ const initialState: GameState = {
   lastCoinAmount: 0,
   currentWeather: "none",
   weatherIntensity: 0,
+  dayStartTotalEarnings: 0,
+  todayInvested: 0,
+  todayBankSaved: 0,
   isPlaying: true,
   showEndOfDay: false,
   showLesson: false,
@@ -278,13 +281,38 @@ export const useGameStore = create<GameState & GameActions>()(
         const bankInterest = Math.floor(state.player.bankBalance * 0.01);
 
         // Generate lesson placeholder (will be replaced with AI)
+        const dailyEarnings =
+          state.player.totalEarnings - state.dayStartTotalEarnings;
+        const savedToday = state.todayBankSaved;
+        const investedToday = state.todayInvested;
+        const additionalWater =
+          state.currentWeather !== "none"
+            ? GAME_CONFIG.WEATHER_DAILY_WATER_BONUS
+            : 0;
+
+        // Asset impact summary
+        let assetImpact = "";
+        const depreciating = state.ownedAssets.filter(
+          (a) => a.type === "depreciating",
+        );
+        const appreciating = state.ownedAssets.filter(
+          (a) => a.type === "appreciating",
+        );
+
+        if (depreciating.length > 0 || appreciating.length > 0) {
+          assetImpact = `\n\nYou own ${depreciating.length} depreciating asset(s) that provide immediate income but lose value, and ${appreciating.length} appreciating asset(s) that grow in value over time. In real life, this is like owning both a car (depreciates, costs maintenance) and property (appreciates, long-term investment).`;
+        }
+
         const lesson: DailyLesson = {
           day: state.player.currentDay,
-          title: `Day ${state.player.currentDay} Complete!`,
-          content: `Great job today! You earned money and learned about managing resources.`,
-          tip: "Remember: Saving early helps your money grow over time!",
-          basedOn: ["daily_summary"],
+          title: `Day ${state.player.currentDay} Review`,
+          content: `Today you watered your tree ${state.tree.timesWateredToday} time(s) and earned ₹${dailyEarnings}. You saved ₹${savedToday} to your bank and invested ₹${investedToday}. In the real world, this is like balancing cash for daily needs, savings for security, and investments for long-term growth. The bank is liquid (you can access it tomorrow) but grows slowly. Investments grow faster but are locked.${assetImpact}`,
+          tip: `Good financial habits: Save emergency funds, invest for growth, diversify assets, and always keep some cash available.`,
+          basedOn: ["daily_performance"],
         };
+
+        const newWallet =
+          state.player.wallet + state.player.bankBalance + bankInterest;
 
         set({
           tree: resetTreeForNewDay(state.tree),
@@ -294,10 +322,11 @@ export const useGameStore = create<GameState & GameActions>()(
           player: {
             ...state.player,
             currentDay: state.player.currentDay + 1,
-            wallet: state.player.bankBalance + bankInterest, // Bank balance becomes wallet
-            bankBalance: 0, // Reset bank
+            wallet: newWallet,
+            bankBalance: 0,
             investmentBalance:
               state.player.investmentBalance + investmentGrowth,
+            waterUnits: state.player.waterUnits + additionalWater,
           },
           lessons: [...state.lessons, lesson],
           showEndOfDay: false,
@@ -305,6 +334,9 @@ export const useGameStore = create<GameState & GameActions>()(
           currentLesson: lesson,
           currentScreen: "play",
           timeOfDay: "morning",
+          dayStartTotalEarnings: state.player.totalEarnings,
+          todayInvested: 0,
+          todayBankSaved: 0,
         });
 
         // Update AI tip
@@ -328,6 +360,7 @@ export const useGameStore = create<GameState & GameActions>()(
             wallet: state.player.wallet - amount,
             bankBalance: state.player.bankBalance + amount,
           },
+          todayBankSaved: state.todayBankSaved + amount,
         });
       },
 
@@ -342,6 +375,7 @@ export const useGameStore = create<GameState & GameActions>()(
             wallet: state.player.wallet - amount,
             investmentBalance: state.player.investmentBalance + amount,
           },
+          todayInvested: state.todayInvested + amount,
         });
       },
 
@@ -401,6 +435,42 @@ export const useGameStore = create<GameState & GameActions>()(
         set({
           currentWeather: "none",
           weatherIntensity: 0,
+        });
+      },
+
+      // Pay weather event charge to end weather early
+      payWeatherCharge: () => {
+        const state = get();
+        if (state.currentWeather === "none") return;
+
+        const weatherChargeMap: Record<WeatherEvent, number> = {
+          rain: GAME_CONFIG.WEATHER_RAIN_CLEAR_COST,
+          drought: GAME_CONFIG.WEATHER_DROUGHT_CLEAR_COST,
+          storm: GAME_CONFIG.WEATHER_STORM_CLEAR_COST,
+          none: 0,
+        };
+
+        const charge = weatherChargeMap[state.currentWeather];
+        const newWallet = state.player.wallet - charge;
+
+        const lesson: DailyLesson = {
+          day: state.player.currentDay,
+          title: `Weather cleared for ₹${charge}`,
+          content: `You paid ₹${charge} to end the ${state.currentWeather} event. This shows how emergency costs can affect your wallet and why savings matter.`, 
+          tip: `Having a reserve helps you avoid negative balances and recover faster.`, 
+          basedOn: ["weather_event"],
+        };
+
+        set({
+          player: {
+            ...state.player,
+            wallet: newWallet,
+          },
+          currentWeather: "none",
+          weatherIntensity: 0,
+          lessons: [...state.lessons, lesson],
+          showLesson: true,
+          currentLesson: lesson,
         });
       },
     }),

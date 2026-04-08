@@ -9,7 +9,7 @@ import { WEATHER_TIPS } from "./WeatherManager";
 import { useEffect, useState } from "react";
 
 export const WeatherOverlay = () => {
-  const { currentWeather, weatherIntensity } = useGameStore();
+  const { currentWeather, weatherIntensity, player, payWeatherCharge } = useGameStore();
   const [showTip, setShowTip] = useState(false);
   const [tipSeen, setTipSeen] = useState<string | null>(null);
 
@@ -60,6 +60,54 @@ export const WeatherOverlay = () => {
               >
                 Got it!
               </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {currentWeather !== "none" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.4 }}
+            className="fixed bottom-6 left-1/2 z-50 w-[min(90vw,420px)] -translate-x-1/2"
+          >
+            <div className="rounded-3xl border border-white/40 bg-white/90 p-5 shadow-2xl backdrop-blur-xl">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.15em] text-slate-500">
+                      Active Event
+                    </p>
+                    <h4 className="text-xl font-bold text-slate-900">
+                      {currentWeather === "rain" && "Rain Event"}
+                      {currentWeather === "drought" && "Drought Event"}
+                      {currentWeather === "storm" && "Storm Event"}
+                    </h4>
+                  </div>
+                  <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    ₹{currentWeather === "rain" ? 20 : currentWeather === "drought" ? 40 : 60}
+                  </div>
+                </div>
+
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  An extreme event is active. Pay the charge to clear it now, or your balance can go negative and you’ll receive +10 water tomorrow to recover.
+                </p>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    onClick={payWeatherCharge}
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                  >
+                    Pay ₹{currentWeather === "rain" ? 20 : currentWeather === "drought" ? 40 : 60} to clear
+                  </button>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    Wallet: ₹{player.wallet}
+                  </div>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}

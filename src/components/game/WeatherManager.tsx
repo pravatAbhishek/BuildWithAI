@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useGameStore } from "@/store/gameStore";
 
 const WEATHER_TIPS = {
@@ -25,40 +25,23 @@ const WEATHER_TIPS = {
 };
 
 export const WeatherManager = () => {
-  const {
-    currentWeather,
-    startNewDay,
-    triggerWeatherEvent,
-    clearWeatherEvent,
-    player,
-  } = useGameStore();
+  const { currentWeather, player, triggerWeatherEvent } = useGameStore();
+  const triggeredDayRef = useRef<number>(0);
 
   useEffect(() => {
-    // Randomly trigger weather based on day count
-    // 30% chance each day for a weather event
+    if (currentWeather !== "none") return;
+    if (triggeredDayRef.current === player.currentDay) return;
+
+    triggeredDayRef.current = player.currentDay;
     const shouldTriggerWeather = Math.random() < 0.3;
+    if (!shouldTriggerWeather) return;
 
-    if (shouldTriggerWeather && currentWeather === "none") {
-      const weatherEvents = ["rain", "drought", "storm"] as const;
-      const randomWeather =
-        weatherEvents[Math.floor(Math.random() * weatherEvents.length)];
+    const weatherEvents = ["rain", "drought", "storm"] as const;
+    const randomWeather =
+      weatherEvents[Math.floor(Math.random() * weatherEvents.length)];
 
-      triggerWeatherEvent(randomWeather);
-
-      // Duration: 5 days
-      const duration = 5;
-      const endDay = player.currentDay + duration;
-
-      // Clear weather after duration
-      const timer = setTimeout(() => {
-        if (useGameStore.getState().currentWeather === randomWeather) {
-          clearWeatherEvent();
-        }
-      }, duration * 5000); // Approximate timing
-
-      return () => clearTimeout(timer);
-    }
-  }, [player.currentDay, currentWeather, triggerWeatherEvent, clearWeatherEvent]);
+    triggerWeatherEvent(randomWeather);
+  }, [currentWeather, player.currentDay, triggerWeatherEvent]);
 
   return null;
 };

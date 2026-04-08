@@ -8,6 +8,7 @@ import { calculateTreeYield, canWaterTree } from "@/lib/gameEngine";
 import { BankPanel } from "@/components/banking";
 import { WeatherManager } from "./WeatherManager";
 import { WeatherOverlay } from "./WeatherOverlay";
+import { DailyLesson } from "@/components/lesson";
 import type { AssetType, MarketAsset } from "@/types/game";
 
 type Phase = "morning" | "evening" | "night" | "sunrise";
@@ -81,6 +82,7 @@ export function GameCanvas() {
     <>
       <WeatherManager />
       <WeatherOverlay />
+      <DailyLesson />
       <div
       className={`relative h-screen w-full overflow-hidden bg-gradient-to-b ${bgClass} transition-all duration-700`}
     >
@@ -353,34 +355,34 @@ function ShopModal({
             onClick={() => setTab("depreciating")}
             className={`rounded-2xl px-4 py-4 text-2xl font-black ${
               tab === "depreciating"
-                ? "bg-red-500 text-white"
-                : "bg-red-100 text-red-800"
+                ? "bg-sky-500 text-white"
+                : "bg-sky-100 text-sky-800"
             }`}
           >
-            ⚡ Depreciating
+            ⚡ Fast Growth
           </button>
           <button
             onClick={() => setTab("appreciating")}
             className={`rounded-2xl px-4 py-4 text-2xl font-black ${
               tab === "appreciating"
-                ? "bg-emerald-600 text-white"
-                : "bg-emerald-100 text-emerald-800"
+                ? "bg-amber-500 text-white"
+                : "bg-amber-100 text-amber-800"
             }`}
           >
-            🌳 Appreciating
+            📈 Long Term
           </button>
         </div>
 
         <div
           className={`mb-4 rounded-2xl p-3 text-center text-xl font-bold ${
             tab === "depreciating"
-              ? "bg-red-100 text-red-800"
-              : "bg-emerald-100 text-emerald-800"
+              ? "bg-sky-100 text-sky-800"
+              : "bg-amber-100 text-amber-800"
           }`}
         >
           {tab === "depreciating"
-            ? "Greedy choice: quick boost now, but maintenance and value drop later."
-            : "Patient choice: no instant boost, but better long-term growth."}
+            ? "Fast Growth Assets: Quick income boost but value decreases over time. Learn the tradeoffs!"
+            : "Long Term Assets: Slow growth but value increases over time. Build wealth gradually!"}
         </div>
 
         <div className="max-h-[42vh] space-y-3 overflow-y-auto pr-1">
@@ -395,10 +397,10 @@ function ShopModal({
                 key={asset.id}
                 className={`rounded-2xl border-2 p-4 ${
                   canAfford
-                    ? "border-emerald-300 bg-emerald-50"
+                    ? "border-indigo-300 bg-indigo-50"
                     : owned
                       ? "border-slate-300 bg-slate-100"
-                      : "border-red-200 bg-red-50"
+                      : "border-gray-300 bg-gray-50"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">

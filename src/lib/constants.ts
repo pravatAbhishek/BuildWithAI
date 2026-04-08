@@ -31,6 +31,10 @@ export const GAME_CONFIG = {
   WEATHER_DROUGHT_PENALTY: 0.5, // 50% earnings penalty during drought
   WEATHER_STORM_PENALTY: 0.3, // 30% earnings penalty during storm
   WEATHER_EVENT_DURATION: 5, // Days a weather event lasts
+  WEATHER_RAIN_CLEAR_COST: 20,
+  WEATHER_DROUGHT_CLEAR_COST: 40,
+  WEATHER_STORM_CLEAR_COST: 60,
+  WEATHER_DAILY_WATER_BONUS: 10,
 } as const;
 
 export const MARKET_ASSETS = [

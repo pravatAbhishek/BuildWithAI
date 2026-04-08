@@ -12,6 +12,7 @@ export function EndDayScreen() {
     investMoney,
     startNewDay,
     setScreen,
+    dayStartTotalEarnings,
   } = useGameStore();
 
   const [bankAmount, setBankAmount] = useState(0);
@@ -23,6 +24,10 @@ export function EndDayScreen() {
   if (!showEndOfDay) return null;
 
   const remainingMoney = player.wallet - bankAmount - investAmount;
+  const dailyEarnings = Math.max(
+    0,
+    player.totalEarnings - dayStartTotalEarnings,
+  );
 
   const handleSaveToBank = () => {
     if (bankAmount > 0) {
@@ -85,6 +90,7 @@ export function EndDayScreen() {
           <SummaryStep
             player={player}
             tree={tree}
+            dailyEarnings={dailyEarnings}
             onContinue={() => setStep("allocate")}
           />
         )}
@@ -117,10 +123,12 @@ export function EndDayScreen() {
 function SummaryStep({
   player,
   tree,
+  dailyEarnings,
   onContinue,
 }: {
   player: { wallet: number; currentDay: number; totalEarnings: number };
   tree: { timesWateredToday: number; stage: string };
+  dailyEarnings: number;
   onContinue: () => void;
 }) {
   return (
@@ -142,7 +150,7 @@ function SummaryStep({
         </div>
         <div className="flex justify-between items-center text-white">
           <span className="text-purple-200">Today&apos;s earnings:</span>
-          <span className="font-bold text-yellow-400">₹{player.wallet} 🪙</span>
+          <span className="font-bold text-yellow-400">₹{dailyEarnings} 🪙</span>
         </div>
       </div>
 
@@ -185,6 +193,24 @@ function AllocateStep({
         <div className="text-center text-white mb-4">
           <span className="text-purple-200">Available: </span>
           <span className="text-2xl font-bold text-yellow-400">₹{wallet}</span>
+        </div>
+
+        {/* Daily Balance Breakdown */}
+        <div className="bg-slate-500/30 rounded-xl p-3 mb-4">
+          <div className="text-white text-sm space-y-2">
+            <div className="flex justify-between">
+              <span className="text-slate-200">To save in bank:</span>
+              <span className="font-bold text-blue-300">₹{bankAmount}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-200">To invest:</span>
+              <span className="font-bold text-purple-300">₹{investAmount}</span>
+            </div>
+            <div className="border-t border-slate-400 pt-2 flex justify-between">
+              <span className="text-slate-200">Cash left for hand:</span>
+              <span className="font-bold text-yellow-300">₹{remainingMoney}</span>
+            </div>
+          </div>
         </div>
 
         {/* Bank option */}
