@@ -10,17 +10,22 @@ export function SavingsAccount() {
   const [amount, setAmount] = useState(10);
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
 
+  const shouldPrioritizeWithdraw = player.wallet <= 0 && savings.balance > 0;
+  const resolvedMode: "deposit" | "withdraw" = shouldPrioritizeWithdraw
+    ? "withdraw"
+    : mode;
+
   const dailyInterest = Math.floor(savings.balance * savings.interestRate);
 
   const canDeposit =
-    mode === "deposit" && player.wallet >= amount && amount > 0;
+    resolvedMode === "deposit" && player.wallet >= amount && amount > 0;
   const canWithdraw =
-    mode === "withdraw" && savings.balance >= amount && amount > 0;
+    resolvedMode === "withdraw" && savings.balance >= amount && amount > 0;
 
   const handleAction = () => {
-    if (mode === "deposit" && canDeposit) {
+    if (resolvedMode === "deposit" && canDeposit) {
       depositToSavings(amount);
-    } else if (mode === "withdraw" && canWithdraw) {
+    } else if (resolvedMode === "withdraw" && canWithdraw) {
       withdrawFromSavings(amount);
     }
   };
@@ -44,7 +49,7 @@ export function SavingsAccount() {
         <div className="flex rounded-lg overflow-hidden border border-gray-200">
           <button
             className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              mode === "deposit"
+              resolvedMode === "deposit"
                 ? "bg-green-500 text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
@@ -54,7 +59,7 @@ export function SavingsAccount() {
           </button>
           <button
             className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              mode === "withdraw"
+              resolvedMode === "withdraw"
                 ? "bg-blue-500 text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
@@ -91,7 +96,7 @@ export function SavingsAccount() {
               ₹{amt}
             </Button>
           ))}
-          {mode === "deposit" && (
+          {resolvedMode === "deposit" && (
             <Button
               variant="secondary"
               size="sm"
@@ -101,7 +106,7 @@ export function SavingsAccount() {
               All
             </Button>
           )}
-          {mode === "withdraw" && (
+          {resolvedMode === "withdraw" && (
             <Button
               variant="secondary"
               size="sm"
@@ -116,11 +121,11 @@ export function SavingsAccount() {
         {/* Action Button */}
         <Button
           onClick={handleAction}
-          disabled={mode === "deposit" ? !canDeposit : !canWithdraw}
-          variant={mode === "deposit" ? "success" : "primary"}
+          disabled={resolvedMode === "deposit" ? !canDeposit : !canWithdraw}
+          variant={resolvedMode === "deposit" ? "success" : "primary"}
           className="w-full"
         >
-          {mode === "deposit" ? `Deposit ₹${amount}` : `Withdraw ₹${amount}`}
+          {resolvedMode === "deposit" ? `Deposit ₹${amount}` : `Withdraw ₹${amount}`}
         </Button>
 
         {/* Info */}

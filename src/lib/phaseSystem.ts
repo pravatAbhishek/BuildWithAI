@@ -157,14 +157,13 @@ export const PHASE_CONFIG: Record<PhaseId, PhaseDefinition> = {
       "risk-system",
       "shop-assets",
       "inventory",
-      "stock-market",
       "leaderboard",
     ],
     learned: [
       "Your tree is fully grown. Strategy now matters more than growth speed.",
-      "Use market signals for smarter capital allocation.",
+      "Strengthen cash discipline before entering advanced markets.",
     ],
-    unlockSummary: ["Stock market", "Leaderboard"],
+    unlockSummary: ["Leaderboard"],
   },
   9: {
     id: 9,
@@ -187,9 +186,9 @@ export const PHASE_CONFIG: Record<PhaseId, PhaseDefinition> = {
     ],
     learned: [
       "You can now think like a manager, not just a player.",
-      "Long-term goals and stable cash flow become your core strategy.",
+      "Use daily news and deterministic market loops to plan stock entries and exits.",
     ],
-    unlockSummary: ["Management mode", "Business and life goals"],
+    unlockSummary: ["Stock market", "Management mode", "Business and life goals"],
   },
 };
 
@@ -209,14 +208,12 @@ export function isFeatureUnlocked(feature: UnlockFeature, phase: number): boolea
 export function getNextPhase(snapshot: PhaseProgressSnapshot): PhaseId | null {
   const current = Math.max(1, Math.min(9, snapshot.currentPhase || 1)) as PhaseId;
 
-  if (current === 1 && snapshot.totalWaterings >= 3) return 2;
-  if (current === 2 && snapshot.completedScenarios >= 2) return 3;
-  if (current === 3 && snapshot.savingsBalance >= 150) return 4;
-  if (current === 4 && snapshot.currentDay >= 4) return 5;
-  if (current === 5 && snapshot.hasAnyInvestment) return 6;
-  if (current === 6 && snapshot.completedScenarios >= 6) return 7;
-  if (current === 7 && snapshot.treeStage === "full") return 8;
-  if (current === 8 && snapshot.currentDay >= 12) return 9;
+  if (current >= 9) return null;
+
+  // Prototype flow: advance one phase per day.
+  if (snapshot.currentDay >= current + 1) {
+    return (current + 1) as PhaseId;
+  }
 
   return null;
 }

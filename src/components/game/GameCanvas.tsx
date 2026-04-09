@@ -12,12 +12,20 @@ import {
 } from "@/lib/gameEngine";
 import { GAME_CONFIG } from "@/lib/constants";
 import { calculateAssetValue } from "@/lib/assetCalculator";
-import { BankPanel } from "@/components/banking";
+import { BankPanel, StockInvestment } from "@/components/banking";
 import { WeatherManager } from "./WeatherManager";
 import { WeatherOverlay } from "./WeatherOverlay";
 import { AIDayReview } from "@/components/lesson";
 import { GameMenu } from "@/components/menu";
-import type { AssetType, MarketAsset, Asset, SuddenEvent, DailySummary } from "@/types/game";
+import type {
+  AssetType,
+  MarketAsset,
+  Asset,
+  SuddenEvent,
+  DailySummary,
+  StockHolding,
+  StockItem,
+} from "@/types/game";
 import { EventCard } from "./EventCard";
 
 type Phase = "morning" | "events" | "evening" | "night" | "sunrise";
@@ -27,6 +35,17 @@ const treeShakeVariants: Variants = {
   calm: { rotate: 0, scaleY: 1 },
   shake: { rotate: [0, -3, 3, -2, 2, 0], scaleY: [1, 0.95, 1.05, 1] },
 };
+
+function getStockPriceForDay(stock: StockItem, day: number): number {
+  const priceLoop = Array.isArray(stock.priceLoop) ? stock.priceLoop : [];
+
+  if (priceLoop.length > 0) {
+    const index = Math.max(0, day - 1) % priceLoop.length;
+    return priceLoop[index];
+  }
+
+  return stock.points[stock.points.length - 1]?.price || 0;
+}
 
 // Sparkle particle component
 function Sparkle({
@@ -76,6 +95,9 @@ export function GameCanvas() {
     dailySummaries,
     fixedDeposits,
     sips,
+    stockItems,
+    stockHoldings,
+    stockUnlocked,
     aiReviewEnabled,
     latestGeminiReview,
     waterTree,
@@ -113,6 +135,7 @@ export function GameCanvas() {
   const [shopTab, setShopTab] = useState<ShopTab>("water");
   const [missionsOpen, setMissionsOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [stockDeskOpen, setStockDeskOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [shakeTree, setShakeTree] = useState(false);
   const [autoWaterVisual, setAutoWaterVisual] = useState(false);
@@ -128,6 +151,8 @@ export function GameCanvas() {
   const leaderboardUnlocked = isFeatureUnlocked("leaderboard");
   const riskUnlocked = isFeatureUnlocked("risk-system");
   const loanUnlocked = isFeatureUnlocked("bank-loans");
+  const stockFeatureUnlocked = isFeatureUnlocked("stock-market");
+  const stockDeskUnlocked = stockFeatureUnlocked && stockUnlocked;
 
   const activityEffects = useMemo(() => {
     const effects: Array<{
@@ -212,6 +237,7 @@ export function GameCanvas() {
     shopOpen ||
     missionsOpen ||
     inventoryOpen ||
+    stockDeskOpen ||
     leaderboardOpen ||
     showBankModal ||
     showSuddenEvent ||
@@ -225,15 +251,17 @@ export function GameCanvas() {
     setShopOpen(false);
     setMissionsOpen(false);
     setInventoryOpen(false);
+    setStockDeskOpen(false);
     setLeaderboardOpen(false);
     closeBankPanel();
   };
-  const openMorningPanel = (panel: "shop" | "missions" | "inventory" | "bank") => {
+  const openMorningPanel = (panel: "shop" | "missions" | "inventory" | "bank" | "stock") => {
     if (phase !== "morning" || showSuddenEvent || isGameOver || currentScreen !== "play") return;
 
     if (panel === "shop" && !waterShopUnlocked) return;
     if (panel === "inventory" && !inventoryUnlocked) return;
     if (panel === "bank" && !savingsUnlocked) return;
+    if (panel === "stock" && !stockDeskUnlocked) return;
 
     closeMorningPanels();
 
@@ -249,6 +277,11 @@ export function GameCanvas() {
 
     if (panel === "inventory") {
       setInventoryOpen(true);
+      return;
+    }
+
+    if (panel === "stock") {
+      setStockDeskOpen(true);
       return;
     }
 
@@ -283,7 +316,17 @@ export function GameCanvas() {
     [ownedAssets, player.currentDay],
   );
 
-  const netWorth = player.wallet + savings.balance + inventoryValue;
+  const stockInventoryValue = useMemo(
+    () =>
+      stockHoldings.reduce((sum, holding) => {
+        const stock = stockItems.find((item) => item.id === holding.stockId);
+        if (!stock) return sum;
+        return sum + getStockPriceForDay(stock, player.currentDay) * holding.quantity;
+      }, 0),
+    [player.currentDay, stockHoldings, stockItems],
+  );
+
+  const netWorth = player.wallet + savings.balance + inventoryValue + stockInventoryValue;
   const latestSummary = dailySummaries[dailySummaries.length - 1] ?? null;
 
   useEffect(() => {
@@ -637,6 +680,7 @@ export function GameCanvas() {
               showShop={waterShopUnlocked}
               showBank={savingsUnlocked}
               showInventory={inventoryUnlocked}
+              showStock={stockDeskUnlocked}
               onShop={() => openMorningPanel("shop")}
               onEndDay={() => {
                 if (isModalBlockingMorningFlow) return;
@@ -644,6 +688,7 @@ export function GameCanvas() {
                 setPhase("evening");
               }}
               onBank={() => openMorningPanel("bank")}
+              onStock={() => openMorningPanel("stock")}
               onMissions={() => openMorningPanel("missions")}
               onInventory={() => openMorningPanel("inventory")}
             />
@@ -710,10 +755,18 @@ export function GameCanvas() {
           {inventoryOpen && (
             <InventoryModal
               assets={ownedAssets}
+              stockItems={stockItems}
+              stockHoldings={stockHoldings}
               currentDay={player.currentDay}
               onSell={sellAsset}
               onClose={() => setInventoryOpen(false)}
             />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {stockDeskOpen && (
+            <StockInvestmentModal onClose={() => setStockDeskOpen(false)} />
           )}
         </AnimatePresence>
 
@@ -1021,9 +1074,11 @@ function BottomActions({
   showShop,
   showBank,
   showInventory,
+  showStock,
   onShop,
   onEndDay,
   onBank,
+  onStock,
   onMissions,
   onInventory,
 }: {
@@ -1031,9 +1086,11 @@ function BottomActions({
   showShop: boolean;
   showBank: boolean;
   showInventory: boolean;
+  showStock: boolean;
   onShop: () => void;
   onEndDay: () => void;
   onBank: () => void;
+  onStock: () => void;
   onMissions: () => void;
   onInventory: () => void;
 }) {
@@ -1079,6 +1136,25 @@ function BottomActions({
             <span className="flex items-center justify-center gap-3">
               <span className="text-2xl">🏦</span>
               <span>Bank</span>
+            </span>
+          </motion.button>
+        )}
+
+        {showStock && (
+          <motion.button
+            layout
+            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+            whileHover={{ scale: 1.05, y: -3 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onStock}
+            className="w-[min(44vw,190px)] rounded-2xl bg-gradient-to-br from-sky-500 via-cyan-500 to-teal-600 px-4 py-4 text-lg font-black text-white shadow-xl transition-shadow hover:shadow-cyan-500/40 sm:w-44"
+            style={{
+              boxShadow: "0 10px 30px rgba(6, 182, 212, 0.32), inset 0 -3px 0 rgba(0,0,0,0.15)",
+            }}
+          >
+            <span className="flex items-center justify-center gap-3">
+              <span className="text-2xl">📊</span>
+              <span>Stocks</span>
             </span>
           </motion.button>
         )}
@@ -1543,10 +1619,13 @@ function QuickBankModal({
   const [amount, setAmount] = useState(50);
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
 
-  const canDeposit = mode === "deposit" && player.wallet >= amount && amount > 0;
-  const canWithdraw = mode === "withdraw" && savings.balance >= amount && amount > 0;
-  const netWorth = player.wallet + savings.balance;
-  const isEmergency = player.wallet <= GAME_CONFIG.EMERGENCY_LOAN_DANGER_WALLET || netWorth <= 120;
+  const shouldPrioritizeWithdraw = player.wallet <= 0 && savings.balance > 0;
+  const resolvedMode: "deposit" | "withdraw" = shouldPrioritizeWithdraw
+    ? "withdraw"
+    : mode;
+  const canDeposit = resolvedMode === "deposit" && player.wallet >= amount && amount > 0;
+  const canWithdraw = resolvedMode === "withdraw" && savings.balance >= amount && amount > 0;
+  const canRequestLoan = loanUnlocked && !emergencyLoan;
   const loanDays = emergencyLoan ? Math.max(0, currentDay - emergencyLoan.startDay) : 0;
   const loanOutstanding = emergencyLoan
     ? Math.max(
@@ -1559,9 +1638,9 @@ function QuickBankModal({
     : 0;
 
   const handleAction = () => {
-    if (mode === "deposit" && canDeposit) {
+    if (resolvedMode === "deposit" && canDeposit) {
       depositToSavings(amount);
-    } else if (mode === "withdraw" && canWithdraw) {
+    } else if (resolvedMode === "withdraw" && canWithdraw) {
       withdrawFromSavings(amount);
     }
   };
@@ -1618,16 +1697,16 @@ function QuickBankModal({
             {!emergencyLoan && (
               <>
                 <p className="mt-1 text-xs text-amber-700">
-                  Available only during cash emergency. Loan interest increases with repayment time.
+                  Loan interest increases with repayment time. Only one active loan allowed.
                 </p>
                 <div className="mt-2 flex gap-2">
                   {GAME_CONFIG.EMERGENCY_LOAN_OPTIONS.map((option) => (
                     <button
                       key={option}
-                      disabled={!isEmergency}
+                      disabled={!canRequestLoan}
                       onClick={() => onTakeLoan(option)}
                       className={`flex-1 rounded-xl px-2 py-2 text-xs font-black transition ${
-                        isEmergency
+                        canRequestLoan
                           ? "bg-amber-500 text-white hover:bg-amber-600"
                           : "cursor-not-allowed bg-slate-200 text-slate-500"
                       }`}
@@ -1636,9 +1715,9 @@ function QuickBankModal({
                     </button>
                   ))}
                 </div>
-                {!isEmergency && (
+                {!canRequestLoan && (
                   <p className="mt-2 text-[11px] text-slate-500">
-                    Loan buttons unlock when wallet is critically low.
+                    Repay active loan to request a new one.
                   </p>
                 )}
               </>
@@ -1674,7 +1753,7 @@ function QuickBankModal({
         <div className="flex rounded-xl overflow-hidden border border-gray-200 mb-4">
           <button
             className={`flex-1 py-3 font-bold transition-colors ${
-              mode === "deposit"
+              resolvedMode === "deposit"
                 ? "bg-green-500 text-white"
                 : "bg-gray-100 text-gray-600"
             }`}
@@ -1684,7 +1763,7 @@ function QuickBankModal({
           </button>
           <button
             className={`flex-1 py-3 font-bold transition-colors ${
-              mode === "withdraw"
+              resolvedMode === "withdraw"
                 ? "bg-blue-500 text-white"
                 : "bg-gray-100 text-gray-600"
             }`}
@@ -1715,7 +1794,7 @@ function QuickBankModal({
             </button>
           ))}
           <button
-            onClick={() => setAmount(mode === "deposit" ? player.wallet : savings.balance)}
+            onClick={() => setAmount(resolvedMode === "deposit" ? player.wallet : savings.balance)}
             className="flex-1 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-bold text-gray-700 transition-colors"
           >
             All
@@ -1727,16 +1806,16 @@ function QuickBankModal({
           whileHover={canDeposit || canWithdraw ? { scale: 1.02 } : {}}
           whileTap={canDeposit || canWithdraw ? { scale: 0.98 } : {}}
           onClick={handleAction}
-          disabled={mode === "deposit" ? !canDeposit : !canWithdraw}
+          disabled={resolvedMode === "deposit" ? !canDeposit : !canWithdraw}
           className={`w-full py-4 rounded-xl font-black text-white text-lg transition-all ${
-            (mode === "deposit" ? canDeposit : canWithdraw)
-              ? mode === "deposit"
+            (resolvedMode === "deposit" ? canDeposit : canWithdraw)
+              ? resolvedMode === "deposit"
                 ? "bg-gradient-to-r from-green-500 to-emerald-600"
                 : "bg-gradient-to-r from-blue-500 to-indigo-600"
               : "bg-slate-400 cursor-not-allowed"
           }`}
         >
-          {mode === "deposit" ? `⬇️ Deposit ₹${amount}` : `⬆️ Withdraw ₹${amount}`}
+          {resolvedMode === "deposit" ? `⬇️ Deposit ₹${amount}` : `⬆️ Withdraw ₹${amount}`}
         </motion.button>
       </motion.div>
     </motion.div>
@@ -1869,13 +1948,49 @@ function MissionsModal({
   );
 }
 
+function StockInvestmentModal({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.div
+      className="absolute inset-0 z-[72] flex items-center justify-center bg-black/45 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="w-full max-w-6xl rounded-3xl bg-gradient-to-br from-white via-cyan-50 to-sky-50 p-5 shadow-2xl"
+        initial={{ y: 20, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 20, scale: 0.96 }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-2xl font-black text-sky-900">📊 Stock Investment</h3>
+          <button
+            onClick={onClose}
+            className="rounded-full bg-slate-200 px-3 py-1 text-sm font-bold text-slate-600 hover:bg-slate-300"
+          >
+            Close
+          </button>
+        </div>
+
+        <StockInvestment />
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function InventoryModal({
   assets,
+  stockItems,
+  stockHoldings,
   currentDay,
   onSell,
   onClose,
 }: {
   assets: Asset[];
+  stockItems: StockItem[];
+  stockHoldings: StockHolding[];
   currentDay: number;
   onSell: (assetId: string) => void;
   onClose: () => void;
@@ -1888,6 +2003,28 @@ function InventoryModal({
       profitLoss: sellValue - asset.purchasePrice,
     };
   });
+
+  const stockPortfolio = stockHoldings
+    .map((holding) => {
+      const stock = stockItems.find((item) => item.id === holding.stockId);
+      if (!stock) return null;
+
+      const currentPrice = getStockPriceForDay(stock, currentDay);
+      const marketValue = currentPrice * holding.quantity;
+      const profitLoss = marketValue - holding.totalInvested;
+
+      return {
+        ...holding,
+        symbol: stock.symbol,
+        name: stock.name,
+        currentPrice,
+        marketValue,
+        profitLoss,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  const hasPortfolio = portfolio.length > 0 || stockPortfolio.length > 0;
 
   return (
     <motion.div
@@ -1914,39 +2051,78 @@ function InventoryModal({
           </button>
         </div>
 
-        {portfolio.length === 0 ? (
+        {!hasPortfolio ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-600">
-            No assets yet. Buy assets from shop and review sell value here.
+            No assets or stocks yet. Build your portfolio from the shop and stock desk.
           </div>
         ) : (
           <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
-            {portfolio.map((asset) => (
-              <div key={asset.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-lg font-black text-slate-900">{asset.name}</p>
-                    <p className="text-xs text-slate-500">Owned since day {asset.purchaseDay}</p>
-                    <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
-                      Bought at: ₹{asset.purchasePrice} | Sell now: ₹{asset.sellValue}
-                    </div>
-                    <p
-                      className={`mt-2 text-sm font-semibold ${
-                        asset.profitLoss >= 0 ? "text-emerald-600" : "text-red-600"
-                      }`}
-                    >
-                      {asset.profitLoss >= 0 ? "+" : ""}₹{asset.profitLoss} {asset.profitLoss >= 0 ? "profit" : "loss"}
-                    </p>
-                  </div>
+            {portfolio.length > 0 && (
+              <div className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 p-3">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-fuchsia-700">Assets</p>
+                <div className="mt-2 space-y-2">
+                  {portfolio.map((asset) => (
+                    <div key={asset.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-lg font-black text-slate-900">{asset.name}</p>
+                          <p className="text-xs text-slate-500">Owned since day {asset.purchaseDay}</p>
+                          <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+                            Bought at: ₹{asset.purchasePrice} | Sell now: ₹{asset.sellValue}
+                          </div>
+                          <p
+                            className={`mt-2 text-sm font-semibold ${
+                              asset.profitLoss >= 0 ? "text-emerald-600" : "text-red-600"
+                            }`}
+                          >
+                            {asset.profitLoss >= 0 ? "+" : ""}₹{asset.profitLoss} {asset.profitLoss >= 0 ? "profit" : "loss"}
+                          </p>
+                        </div>
 
-                  <button
-                    onClick={() => onSell(asset.id)}
-                    className="rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 px-5 py-3 text-sm font-bold text-white hover:from-rose-600 hover:to-red-700"
-                  >
-                    Sell for ₹{asset.sellValue}
-                  </button>
+                        <button
+                          onClick={() => onSell(asset.id)}
+                          className="rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 px-5 py-3 text-sm font-bold text-white hover:from-rose-600 hover:to-red-700"
+                        >
+                          Sell for ₹{asset.sellValue}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
+            )}
+
+            {stockPortfolio.length > 0 && (
+              <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-3">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-700">Stocks</p>
+                <div className="mt-2 space-y-2">
+                  {stockPortfolio.map((stock) => (
+                    <div key={stock.stockId} className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-black text-slate-900">
+                            {stock.symbol} · {stock.name}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Qty: {stock.quantity} | Avg Buy: ₹{stock.averageBuyPrice.toFixed(2)} | CMP: ₹{stock.currentPrice}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            Invested: ₹{Math.round(stock.totalInvested)} | Value: ₹{Math.round(stock.marketValue)}
+                          </p>
+                        </div>
+                        <p
+                          className={`text-sm font-black ${
+                            stock.profitLoss >= 0 ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                        >
+                          {stock.profitLoss >= 0 ? "+" : ""}₹{Math.round(stock.profitLoss)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

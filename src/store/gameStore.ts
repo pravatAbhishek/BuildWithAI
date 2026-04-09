@@ -15,6 +15,8 @@ import type {
   PendingEvent,
   RiskLevel,
   SimpleEvent,
+  StockHolding,
+  StockItem,
   StormEmergency,
   UnlockFeature,
   WeatherEvent,
@@ -74,6 +76,8 @@ const AI_TIPS = {
 };
 
 const LEADERBOARD_NAMES = ["Rahul", "Priya", "Aarav", "Ananya", "Kabir"];
+const STOCK_HISTORY_POINTS = 10;
+const STOCK_LOOKUP = new Map(STOCK_ITEMS.map((stock) => [stock.id, stock]));
 
 function calculateLevelFromExp(totalEXP: number): number {
   return Math.floor(totalEXP / GAME_CONFIG.LEVEL_EXP_PER_LEVEL) + 1;
@@ -96,6 +100,73 @@ function createLeaderboard(playerLevel: number, totalEXP: number): LeaderboardEn
   });
 }
 
+function normalizeStockItem(stock: StockItem): StockItem {
+  const fallback = STOCK_LOOKUP.get(stock.id);
+  return {
+    ...(fallback || stock),
+    ...stock,
+    priceLoop:
+      stock.priceLoop && stock.priceLoop.length > 0
+        ? stock.priceLoop
+        : fallback?.priceLoop || [stock.points[stock.points.length - 1]?.price || 0],
+    dailyNews:
+      stock.dailyNews && stock.dailyNews.length > 0 ? stock.dailyNews : fallback?.dailyNews || [],
+    points: stock.points && stock.points.length > 0 ? stock.points : fallback?.points || [],
+  };
+}
+
+function normalizeStockItems(stockItems: StockItem[]): StockItem[] {
+  const normalized = stockItems.map((stock) => normalizeStockItem(stock));
+  const knownIds = new Set(normalized.map((stock) => stock.id));
+
+  for (const stock of STOCK_ITEMS) {
+    if (!knownIds.has(stock.id)) {
+      normalized.push(stock);
+    }
+  }
+
+  return normalized;
+}
+
+function getStockPriceForDay(stock: StockItem, day: number): number {
+  const normalized = normalizeStockItem(stock);
+  const loop = normalized.priceLoop;
+  if (loop.length === 0) return 0;
+  const dayIndex = Math.max(0, day - 1) % loop.length;
+  return loop[dayIndex];
+}
+
+function getStockCurrentPrice(stockItems: StockItem[], stockId: string, day: number): number {
+  const source = stockItems.find((stock) => stock.id === stockId) || STOCK_LOOKUP.get(stockId);
+  if (!source) return 0;
+  return getStockPriceForDay(source, day);
+}
+
+function updateStockItemsForDay(stockItems: StockItem[], day: number): StockItem[] {
+  return normalizeStockItems(stockItems).map((stock) => {
+    const price = getStockPriceForDay(stock, day);
+    const dayLabel = `D${day}`;
+    const withoutCurrentDay = stock.points.filter((point) => point.day !== dayLabel);
+
+    return {
+      ...stock,
+      points: [...withoutCurrentDay, { day: dayLabel, price }].slice(-STOCK_HISTORY_POINTS),
+    };
+  });
+}
+
+function getStockHoldingsValue(
+  stockHoldings: StockHolding[],
+  stockItems: StockItem[],
+  currentDay: number,
+): number {
+  return stockHoldings.reduce(
+    (sum, holding) =>
+      sum + getStockCurrentPrice(stockItems, holding.stockId, currentDay) * holding.quantity,
+    0,
+  );
+}
+
 function appendDailySummaryToLocalStorage(summary: DailySummary) {
   if (typeof window === "undefined") return;
   try {
@@ -115,6 +186,8 @@ function calculateNetWorth(
   fixedDeposits = state.fixedDeposits,
   sips = state.sips,
   assets = state.ownedAssets,
+  stockHoldings = state.stockHoldings,
+  stockItems = state.stockItems,
 ): number {
   const fdValue = fixedDeposits.reduce((sum, fd) => {
     if (fd.matured || state.currentDay >= fd.maturityDay) {
@@ -124,8 +197,9 @@ function calculateNetWorth(
   }, 0);
   const sipValue = sips.reduce((sum, sip) => sum + sip.currentValue, 0);
   const assetValue = assets.reduce((sum, asset) => sum + calculateAssetValue(asset, state.currentDay), 0);
+  const stocksValue = getStockHoldingsValue(stockHoldings, stockItems, state.currentDay);
 
-  return wallet + savingsBalance + fdValue + sipValue + assetValue;
+  return wallet + savingsBalance + fdValue + sipValue + assetValue + stocksValue;
 }
 
 function getGameOverPatch(
@@ -135,8 +209,19 @@ function getGameOverPatch(
   fixedDeposits = state.fixedDeposits,
   sips = state.sips,
   assets = state.ownedAssets,
+  stockHoldings = state.stockHoldings,
+  stockItems = state.stockItems,
 ): Pick<GameState, "isPlaying" | "isGameOver" | "gameOverReason"> {
-  const netWorth = calculateNetWorth(state, wallet, savingsBalance, fixedDeposits, sips, assets);
+  const netWorth = calculateNetWorth(
+    state,
+    wallet,
+    savingsBalance,
+    fixedDeposits,
+    sips,
+    assets,
+    stockHoldings,
+    stockItems,
+  );
   if (netWorth >= 0) {
     return {
       isPlaying: true,
@@ -513,7 +598,8 @@ function createInitialState(): GameState {
     showMaintenancePopup: false,
     isGameOver: false,
     gameOverReason: null,
-    stockItems: STOCK_ITEMS,
+    stockItems: updateStockItemsForDay(normalizeStockItems(STOCK_ITEMS), 1),
+    stockHoldings: [],
     stockUnlocked: false,
     stormPenaltyDaysRemaining: 0,
     stormChanceModifier: 0,
@@ -861,13 +947,6 @@ export const useGameStore = create<GameState & GameActions>()(
         if (state.emergencyLoan) return false;
         if (!GAME_CONFIG.EMERGENCY_LOAN_OPTIONS.includes(amount as 500 | 1000 | 2000)) return false;
 
-        const netWorth = calculateNetWorth(state);
-        const isEmergency =
-          state.isGameOver ||
-          state.player.wallet <= GAME_CONFIG.EMERGENCY_LOAN_DANGER_WALLET ||
-          netWorth <= 80;
-        if (!isEmergency) return false;
-
         const loan: EmergencyLoan = {
           id: createId(),
           principal: amount,
@@ -1144,6 +1223,120 @@ export const useGameStore = create<GameState & GameActions>()(
         });
       },
 
+      buyStock: (stockId: string, quantity: number) => {
+        const state = get();
+        if (!state.isPlaying) return false;
+        if (!isFeatureUnlocked("stock-market", state.currentPhase) || !state.stockUnlocked) return false;
+
+        const qty = Math.floor(quantity);
+        if (qty <= 0) return false;
+
+        const unitPrice = getStockCurrentPrice(state.stockItems, stockId, state.currentDay);
+        if (unitPrice <= 0) return false;
+
+        const totalCost = unitPrice * qty;
+        if (state.player.wallet < totalCost) return false;
+
+        const existing = state.stockHoldings.find((holding) => holding.stockId === stockId) || null;
+        const updatedHoldings = existing
+          ? state.stockHoldings.map((holding) => {
+              if (holding.stockId !== stockId) return holding;
+
+              const nextQuantity = holding.quantity + qty;
+              const nextTotalInvested = holding.totalInvested + totalCost;
+              return {
+                ...holding,
+                quantity: nextQuantity,
+                totalInvested: nextTotalInvested,
+                averageBuyPrice: nextQuantity > 0 ? nextTotalInvested / nextQuantity : 0,
+              };
+            })
+          : [
+              ...state.stockHoldings,
+              {
+                stockId,
+                quantity: qty,
+                averageBuyPrice: unitPrice,
+                totalInvested: totalCost,
+              },
+            ];
+
+        const nextWallet = state.player.wallet - totalCost;
+        set({
+          stockHoldings: updatedHoldings,
+          player: {
+            ...state.player,
+            wallet: nextWallet,
+          },
+          todayInvested: state.todayInvested + totalCost,
+          ...getGameOverPatch(
+            state,
+            nextWallet,
+            state.savings.balance,
+            state.fixedDeposits,
+            state.sips,
+            state.ownedAssets,
+            updatedHoldings,
+            state.stockItems,
+          ),
+        });
+
+        return true;
+      },
+
+      sellStock: (stockId: string, quantity: number) => {
+        const state = get();
+        if (!state.isPlaying) return false;
+
+        const qty = Math.floor(quantity);
+        if (qty <= 0) return false;
+
+        const holding = state.stockHoldings.find((item) => item.stockId === stockId);
+        if (!holding || holding.quantity < qty) return false;
+
+        const unitPrice = getStockCurrentPrice(state.stockItems, stockId, state.currentDay);
+        if (unitPrice <= 0) return false;
+
+        const saleValue = unitPrice * qty;
+        const costPerUnit = holding.quantity > 0 ? holding.totalInvested / holding.quantity : 0;
+        const remainingQty = holding.quantity - qty;
+        const remainingInvested = Math.max(0, holding.totalInvested - costPerUnit * qty);
+
+        const updatedHoldings = state.stockHoldings
+          .map((item) => {
+            if (item.stockId !== stockId) return item;
+            if (remainingQty <= 0) return null;
+            return {
+              ...item,
+              quantity: remainingQty,
+              totalInvested: remainingInvested,
+              averageBuyPrice: remainingQty > 0 ? remainingInvested / remainingQty : 0,
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => item !== null);
+
+        const nextWallet = state.player.wallet + saleValue;
+        set({
+          stockHoldings: updatedHoldings,
+          player: {
+            ...state.player,
+            wallet: nextWallet,
+          },
+          ...getGameOverPatch(
+            state,
+            nextWallet,
+            state.savings.balance,
+            state.fixedDeposits,
+            state.sips,
+            state.ownedAssets,
+            updatedHoldings,
+            state.stockItems,
+          ),
+        });
+
+        return true;
+      },
+
       endDay: () => {
         const state = get();
         if (!state.isPlaying) return;
@@ -1205,6 +1398,7 @@ export const useGameStore = create<GameState & GameActions>()(
         const nextWallet = walletBeforeSIP - sipDeductions - maintenanceTotal;
         const nextRiskMeter = Math.max(0, state.riskMeter - 2);
         const nextSimpleEvent = getEventForPhase(nextDay, state.currentPhase);
+        const nextStockItems = updateStockItemsForDay(state.stockItems, nextDay);
 
         set({
           tree: nextTree,
@@ -1254,6 +1448,7 @@ export const useGameStore = create<GameState & GameActions>()(
           showMaintenancePopup: maintenanceBreakdown.length > 0,
           latestEventResolution: null,
           investmentPreviewDays: null,
+          stockItems: nextStockItems,
           reviewStatus: "idle",
           reviewError: null,
           latestGeminiReview: null,
@@ -1267,7 +1462,16 @@ export const useGameStore = create<GameState & GameActions>()(
           loanRepaidToday: 0,
           loanInterestPaidToday: 0,
           weatherLossToday: 0,
-          ...getGameOverPatch(state, nextWallet, nextSavings.balance, nextFDs, nextSips, nextAssets),
+          ...getGameOverPatch(
+            state,
+            nextWallet,
+            nextSavings.balance,
+            nextFDs,
+            nextSips,
+            nextAssets,
+            state.stockHoldings,
+            nextStockItems,
+          ),
         });
 
         syncProgression();

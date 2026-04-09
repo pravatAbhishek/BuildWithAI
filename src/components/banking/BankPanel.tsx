@@ -1,32 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useState } from "react";
+import { motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
 import { GAME_CONFIG } from "@/lib/constants";
 import { SavingsAccount } from "./SavingsAccount";
 import { FixedDeposit } from "./FixedDeposit";
+import { StockInvestment } from "./StockInvestment";
 
 type BankTab = "savings" | "invest" | "market";
 
 export function BankPanel() {
   const {
     player,
-    playerLevel,
     currentDay,
     savings,
     fixedDeposits,
     sips,
-    stockItems,
-    stockUnlocked,
     emergencyLoan,
     takeEmergencyLoan,
     repayEmergencyLoan,
@@ -34,7 +24,6 @@ export function BankPanel() {
   } = useGameStore();
 
   const [activeTab, setActiveTab] = useState<BankTab>("savings");
-  const [newsStockId, setNewsStockId] = useState<string | null>(null);
 
   const totalFDInvested = fixedDeposits.reduce((sum, fd) => sum + fd.principal, 0);
   const totalSIPValue = sips.reduce((sum, sip) => sum + sip.currentValue, 0);
@@ -42,12 +31,8 @@ export function BankPanel() {
   const savingsUnlocked = isFeatureUnlocked("savings-account");
   const investmentsUnlocked = isFeatureUnlocked("investments");
   const loansUnlocked = isFeatureUnlocked("bank-loans");
-  const marketVisible = isFeatureUnlocked("stock-market") && stockUnlocked;
-  const netWorth = player.wallet + savings.balance;
-  const canRequestLoan =
-    loansUnlocked &&
-    !emergencyLoan &&
-    (player.wallet <= GAME_CONFIG.EMERGENCY_LOAN_DANGER_WALLET || netWorth <= 120);
+  const marketVisible = isFeatureUnlocked("stock-market");
+  const canRequestLoan = loansUnlocked && !emergencyLoan;
 
   const loanDays = emergencyLoan ? Math.max(0, currentDay - emergencyLoan.startDay) : 0;
   const loanOutstanding = emergencyLoan
@@ -67,11 +52,6 @@ export function BankPanel() {
         ? "savings"
         : activeTab;
 
-  const selectedNewsStock = useMemo(
-    () => stockItems.find((item) => item.id === newsStockId) || null,
-    [newsStockId, stockItems],
-  );
-
   if (!savingsUnlocked) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -83,75 +63,6 @@ export function BankPanel() {
       </div>
     );
   }
-
-  const renderMarket = () => {
-    if (!stockUnlocked) {
-      return (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-amber-200 bg-amber-50 p-4"
-        >
-          <p className="text-sm font-black text-amber-800">🔒 Market Locked</p>
-          <p className="mt-1 text-sm text-amber-700">
-            Reach Level 8 to unlock the stock market tab.
-          </p>
-          <p className="mt-2 text-xs font-semibold text-amber-700">
-            Current Level: {playerLevel} | Required: 8
-          </p>
-        </motion.div>
-      );
-    }
-
-    return (
-      <div className="space-y-3">
-        <p className="text-xs font-semibold text-slate-600">
-          4 sample stocks with daily news. No early stock events are injected.
-        </p>
-        <div className="grid gap-3 md:grid-cols-2">
-          {stockItems.map((stock) => (
-            <motion.div
-              key={stock.id}
-              whileHover={{ y: -2 }}
-              className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-black text-slate-900">{stock.symbol}</p>
-                  <p className="text-xs text-slate-600">{stock.name}</p>
-                </div>
-                <p className="text-sm font-bold text-sky-700">
-                  ₹{stock.points[stock.points.length - 1]?.price ?? 0}
-                </p>
-              </div>
-              <div className="h-28 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={stock.points}>
-                    <XAxis dataKey="day" hide />
-                    <YAxis hide domain={["dataMin - 3", "dataMax + 3"]} />
-                    <Tooltip />
-                    <Line
-                      dataKey="price"
-                      stroke="#0284c7"
-                      strokeWidth={2.2}
-                      dot={false}
-                      type="monotone"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <button
-                onClick={() => setNewsStockId(stock.id)}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
-              >
-                📰 Daily News
-              </button>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="space-y-4">
@@ -209,9 +120,7 @@ export function BankPanel() {
                   </button>
                 ))}
               </div>
-              {!canRequestLoan && (
-                <p className="mt-2 text-[11px] text-slate-500">Loan unlocks when your wallet is critically low.</p>
-              )}
+              {!canRequestLoan && <p className="mt-2 text-[11px] text-slate-500">Repay active loan to take a new one.</p>}
             </>
           )}
 
@@ -289,44 +198,8 @@ export function BankPanel() {
       >
         {resolvedTab === "savings" && <SavingsAccount />}
         {resolvedTab === "invest" && investmentsUnlocked && <FixedDeposit />}
-        {resolvedTab === "market" && marketVisible && renderMarket()}
+        {resolvedTab === "market" && marketVisible && <StockInvestment />}
       </motion.div>
-
-      <AnimatePresence>
-        {selectedNewsStock && (
-          <motion.div
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 20, opacity: 0 }}
-            >
-              <div className="flex items-center justify-between">
-                <h4 className="text-lg font-black text-slate-900">
-                  📰 {selectedNewsStock.symbol} Daily News
-                </h4>
-                <button
-                  onClick={() => setNewsStockId(null)}
-                  className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600"
-                >
-                  Close
-                </button>
-              </div>
-
-              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-700">
-                {selectedNewsStock.dailyNews.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

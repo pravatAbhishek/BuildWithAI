@@ -198,8 +198,16 @@ export interface StockItem {
   id: string;
   symbol: string;
   name: string;
+  priceLoop: number[];
   points: StockPoint[];
   dailyNews: string[];
+}
+
+export interface StockHolding {
+  stockId: string;
+  quantity: number;
+  averageBuyPrice: number;
+  totalInvested: number;
 }
 
 export interface InflationRate {
@@ -473,6 +481,7 @@ export interface GameState {
   isGameOver: boolean;
   gameOverReason: string | null;
   stockItems: StockItem[];
+  stockHoldings: StockHolding[];
   stockUnlocked: boolean;
   stormPenaltyDaysRemaining: number;
 
@@ -519,6 +528,8 @@ export interface GameActions {
   // Asset actions
   buyAsset: (assetId: string) => void;
   sellAsset: (assetId: string) => void;
+  buyStock: (stockId: string, quantity: number) => boolean;
+  sellStock: (stockId: string, quantity: number) => boolean;
 
   // Day progression
   endDay: () => void;
