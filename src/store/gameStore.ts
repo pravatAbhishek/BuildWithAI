@@ -30,6 +30,7 @@ import {
   createInitialPlayer,
   createInitialTree,
   calculateWaterCost,
+  applyInflationToCash,
 } from "@/lib/gameEngine";
 import {
   createInitialSavings,
@@ -238,105 +239,6 @@ function getAITip(state: GameState): string {
   return AI_TIPS.balanced;
 }
 
-// Generate insightful daily lesson
-function generateDailyLesson(state: GameState): DailyLesson {
-  const dailyEarnings = state.player.totalEarnings - state.dayStartTotalEarnings;
-  const savedToday = state.todayBankSaved;
-  const savingsDepositedToday = state.todaySavingsDeposited;
-  const totalSavedToday = savedToday + savingsDepositedToday;
-  const maintenanceTotal = state.maintenanceChargesToday.reduce(
-    (sum, item) => sum + item.cost,
-    0,
-  );
-
-  const goodDecisions: string[] = [];
-  const improvements: string[] = [];
-
-  // Analyze good decisions
-  if (state.tree.timesWateredToday >= 3) {
-    goodDecisions.push("You watered your plant the maximum times - great productivity!");
-  }
-  if (totalSavedToday > dailyEarnings * 0.2) {
-    goodDecisions.push("You saved more than 20% of your earnings - smart saving habit!");
-  }
-  if (state.savings.balance > 0) {
-    goodDecisions.push("You have money in savings earning 1% daily interest!");
-  }
-  if (state.fixedDeposits.length > 0) {
-    goodDecisions.push("You have FDs growing your wealth for the future!");
-  }
-  if (state.sips.length > 0) {
-    goodDecisions.push("Your SIPs are building wealth automatically!");
-  }
-  if (state.currentWeather === "rain") {
-    goodDecisions.push("Rain gave a bonus because your savings discipline is strong.");
-  }
-  if (state.latestEventResolution?.quality === "strong") {
-    goodDecisions.push(`Great choice in today's challenge: ${state.latestEventResolution.optionLabel}.`);
-  }
-
-  // Analyze areas for improvement
-  if (totalSavedToday === 0 && dailyEarnings > 100) {
-    improvements.push("Consider saving some money - even small amounts add up!");
-  }
-  if (state.savings.balance === 0 && state.player.wallet > 200) {
-    improvements.push("Opening a savings account gives you daily interest.");
-  }
-  if (state.ownedAssets.length === 0 && state.player.currentDay > 3) {
-    improvements.push("Check out assets in the shop - they can boost your earnings!");
-  }
-  if (state.player.waterUnits < 3) {
-    improvements.push("Buy more water to keep earning tomorrow!");
-  }
-  if (maintenanceTotal > 0) {
-    improvements.push(
-      `You paid ₹${maintenanceTotal} in maintenance. Sell old depreciating assets before costs snowball.`,
-    );
-  }
-  if (state.latestEventResolution?.quality === "weak") {
-    improvements.push(
-      `Today's choice "${state.latestEventResolution.optionLabel}" hurt stability. Plan expenses before spending.`,
-    );
-  }
-  if (state.currentWeather === "storm" && state.activeStormEmergency) {
-    improvements.push(
-      "Storm emergency proved why emergency funds are critical when surprise bills appear.",
-    );
-  }
-
-  // Asset impact summary
-  let assetImpact = "";
-  const depreciating = state.ownedAssets.filter((a) => a.type === "depreciating");
-  const appreciating = state.ownedAssets.filter((a) => a.type === "appreciating");
-
-  if (depreciating.length > 0 || appreciating.length > 0) {
-    assetImpact = `\n\n📦 You own ${depreciating.length} depreciating asset(s) (quick boost, loses value) and ${appreciating.length} appreciating asset(s) (grows over time).`;
-  }
-
-  const eventSummary = state.latestEventResolution
-    ? `\n\n🎯 Sudden Event: ${state.latestEventResolution.eventTitle} → ${state.latestEventResolution.optionLabel}. ${state.latestEventResolution.resultText}`
-    : "";
-
-  const maintenanceSummary =
-    maintenanceTotal > 0
-      ? `\n\n🧰 Maintenance paid today: ₹${maintenanceTotal}.`
-      : "";
-
-  const lesson: DailyLesson = {
-    day: state.player.currentDay,
-    title: `Day ${state.player.currentDay} Review`,
-    content: `Today you earned ₹${dailyEarnings} and saved ₹${totalSavedToday}. Your total savings: ₹${state.savings.balance}. Bank balance: ₹${state.player.bankBalance}.${assetImpact}${eventSummary}${maintenanceSummary}`,
-    tip: goodDecisions.length > 0 
-      ? goodDecisions[0] 
-      : "Remember: Save a little every day and your money will grow!",
-    basedOn: ["daily_performance"],
-    goodDecisions,
-    improvements,
-  };
-
-  return lesson;
-}
-
 function buildDailySummaryFromState(
   state: GameState,
   inflationRate: number,
@@ -498,8 +400,9 @@ export const useGameStore = create<GameState & GameActions>()(
         }
 
         const inflationRate = pickDailyInflationRate();
-        const inflationLoss = Math.floor(Math.max(0, state.player.wallet) * inflationRate);
-        const walletAfterInflation = state.player.wallet - inflationLoss;
+        const inflationResult = applyInflationToCash(state.player.wallet, inflationRate);
+        const inflationLoss = inflationResult.loss;
+        const walletAfterInflation = inflationResult.adjustedWallet;
         const summary = buildDailySummaryFromState(state, inflationRate, inflationLoss);
 
         set({
@@ -596,6 +499,7 @@ export const useGameStore = create<GameState & GameActions>()(
           showWaterEffect: true,
           showCoinEffect: true,
           lastCoinAmount: earnings,
+          hasPlayed: true,
         });
 
         // Update AI tip after watering
@@ -829,8 +733,11 @@ export const useGameStore = create<GameState & GameActions>()(
 
       // Start new day
       startNewDay: () => {
+        const preState = get();
+        if (!preState.isPlaying) return;
+
+        get().buildDailySummary();
         const state = get();
-        if (!state.isPlaying) return;
         const nextDay = state.currentDay + 1;
 
         // Apply daily changes
@@ -848,9 +755,6 @@ export const useGameStore = create<GameState & GameActions>()(
         
         // Bank interest (1% daily) - applied to wallet when bank balance transfers
         const bankInterest = Math.floor(state.player.bankBalance * 0.01);
-
-        // Generate enhanced lesson
-        const lesson = generateDailyLesson(state);
 
         // Calculate new wallet (bank balance + interest transfers to wallet, then maintenance is charged)
         const newWallet =
@@ -912,16 +816,16 @@ export const useGameStore = create<GameState & GameActions>()(
           pendingEvents: pendingResolution.remaining,
           activeDailyEvents: dailyEvents,
           activeGameEvent: dailyEvents[0] || null,
-          lessons: [...state.lessons, lesson],
           showEndOfDay: false,
-          showLesson: true,
-          currentLesson: lesson,
+          showLesson: false,
+          currentLesson: null,
           currentScreen: "play",
           timeOfDay: "morning",
           dayStartTotalEarnings: state.player.totalEarnings,
           todayInvested: 0,
           todayBankSaved: 0,
           todaySavingsDeposited: 0,
+          dailyDecisionLog: [],
           currentWeather: "none",
           weatherIntensity: 0,
           activeStormEmergency: null,
@@ -933,12 +837,17 @@ export const useGameStore = create<GameState & GameActions>()(
           lastSuddenEventDay: suddenEvent ? nextDay : state.lastSuddenEventDay,
           latestEventResolution: null,
           investmentPreviewDays: null,
+          reviewStatus: "idle",
+          reviewError: null,
+          reviewChatMessages: [],
+          hasPlayed: true,
           ...gameOverPatch,
         });
 
         // Update AI tip
         const newState = get();
         set({ aiTip: getAITip(newState) });
+        get().refreshLeaderboard();
       },
 
       advanceDay: () => {
@@ -969,17 +878,35 @@ export const useGameStore = create<GameState & GameActions>()(
         );
         const nextRisk = Math.max(0, Math.min(100, state.riskMeter + (consequence.riskDelta || 0)));
         const nextPending: PendingEvent[] = [...state.pendingEvents];
+        const wasTemptationAccepted = isTemptationAccepted(activeEvent, choiceId);
 
         if (consequence.scheduleEventId && consequence.scheduleAfterDays) {
-          nextPending.push({
-            id: createId(),
-            eventId: consequence.scheduleEventId,
-            executeOnDay: state.currentDay + consequence.scheduleAfterDays,
-          });
+          nextPending.push(
+            buildPendingEvent(
+              consequence.scheduleEventId,
+              state.currentDay + consequence.scheduleAfterDays,
+              `Triggered by ${activeEvent.title}`,
+            ),
+          );
         }
 
         const remainingEvents = state.activeDailyEvents.filter((event) => event.id !== activeEvent.id);
         const summary = `${choice.icon} ${choice.label}`;
+        const decision: DailyDecision = {
+          id: createId(),
+          day: state.currentDay,
+          eventId: activeEvent.id,
+          eventTitle: activeEvent.title,
+          choiceId: choice.id,
+          choiceLabel: choice.label,
+          walletDelta: consequence.walletDelta || 0,
+          savingsDelta: consequence.savingsDelta || 0,
+          investmentDelta: consequence.investmentDelta || 0,
+          treeHealthDelta: consequence.treeHealthDelta || 0,
+          riskDelta: consequence.riskDelta || 0,
+          consequenceSummary: summary,
+          wasTemptationAccepted,
+        };
 
         set({
           player: {
@@ -1002,10 +929,12 @@ export const useGameStore = create<GameState & GameActions>()(
           pendingEvents: nextPending,
           activeDailyEvents: remainingEvents,
           activeGameEvent: remainingEvents[0] || null,
+          dailyDecisionLog: [...state.dailyDecisionLog, decision],
           eventConsequences: [
             ...state.eventConsequences,
             { id: createId(), icon: activeEvent.icon, title: activeEvent.title, summary },
           ].slice(-8),
+          hasPlayed: true,
           ...getGameOverPatch(state, nextWallet, nextSavings),
         });
       },
@@ -1144,18 +1073,17 @@ export const useGameStore = create<GameState & GameActions>()(
 
       // Reset game
       resetGame: () => {
-        set({
-          ...initialState,
-          player: createInitialPlayer(),
-          tree: createInitialTree(),
-          savings: createInitialSavings(),
-          fixedDeposits: [],
-          sips: [],
-          ownedAssets: [],
-          lessons: [],
-          aiTip: AI_TIPS.firstDay,
-          showBankModal: false,
-        });
+        if (typeof window !== "undefined") {
+          const keys = Object.keys(window.localStorage);
+          for (const key of keys) {
+            if (key.toLowerCase().includes("growtopia")) {
+              window.localStorage.removeItem(key);
+            }
+          }
+        }
+
+        useGameStore.persist.clearStorage();
+        set(createInitialState());
       },
 
       // Load game (called on mount)
@@ -1277,8 +1205,8 @@ export const useGameStore = create<GameState & GameActions>()(
           activeStormEmergency: null,
           showStormEmergency: false,
           lessons: [...state.lessons, lesson],
-          showLesson: true,
-          currentLesson: lesson,
+          showLesson: false,
+          currentLesson: null,
           ...getGameOverPatch(state, newWallet, state.savings.balance),
         });
       },

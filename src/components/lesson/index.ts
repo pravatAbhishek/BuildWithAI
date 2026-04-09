@@ -1,2 +1,2 @@
-export { DailyLesson } from "./DailyLesson";
+export { AIDayReview } from "./AIDayReview";
 export { ConsequenceReel } from "./ConsequenceReel";

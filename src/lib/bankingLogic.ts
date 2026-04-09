@@ -269,3 +269,30 @@ export function cancelSIP(sip: SIP): { sip: SIP; returnAmount: number } {
 export function getSIPIntervalOptions(): Array<{ days: number; label: string }> {
   return GAME_CONFIG.SIP_INTERVALS.map((option) => ({ ...option }));
 }
+
+/**
+ * Convert nominal value into inflation-adjusted purchasing power.
+ */
+export function toRealValue(
+  nominalValue: number,
+  inflationRate: number,
+  periods: number = 1,
+): number {
+  if (periods <= 0 || inflationRate <= 0) return nominalValue;
+  return Math.floor(nominalValue / Math.pow(1 + inflationRate, periods));
+}
+
+/**
+ * Approximate inflation protection score from long-term vehicles.
+ */
+export function calculateInflationProtectionScore(
+  savingsBalance: number,
+  totalFDPrincipal: number,
+  totalSIPValue: number,
+  totalAssetValue: number,
+): number {
+  const protectedValue = totalFDPrincipal + totalSIPValue + totalAssetValue;
+  const liquidValue = Math.max(1, savingsBalance);
+  const ratio = protectedValue / liquidValue;
+  return Math.min(100, Math.floor(ratio * 18));
+}

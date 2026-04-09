@@ -15,14 +15,13 @@ import { calculateAssetValue } from "@/lib/assetCalculator";
 import { BankPanel } from "@/components/banking";
 import { WeatherManager } from "./WeatherManager";
 import { WeatherOverlay } from "./WeatherOverlay";
-import { DailyLesson } from "@/components/lesson";
-import type { AssetType, MarketAsset, Asset, SuddenEvent } from "@/types/game";
+import { AIDayReview } from "@/components/lesson";
+import { GameMenu } from "@/components/menu";
+import type { AssetType, MarketAsset, Asset, SuddenEvent, DailySummary } from "@/types/game";
 import { EventCard } from "./EventCard";
-import { ConsequenceReel } from "./ConsequenceReel";
 
 type Phase = "morning" | "events" | "evening" | "night" | "sunrise";
 type ShopTab = AssetType | "water";
-const AUTO_YIELD_MULTIPLIER = 0.2;
 
 const treeShakeVariants: Variants = {
   calm: { rotate: 0, scaleY: 1 },
@@ -64,11 +63,15 @@ export function GameCanvas() {
     ownedAssets,
     marketAssets,
     savings,
+    currentScreen,
     currentDay,
+    playerLevel,
+    leaderboard,
     riskMeter,
     riskLevel,
     treeHealth,
     currentWeather,
+    dailySummaries,
     fixedDeposits,
     sips,
     waterTree,
@@ -76,8 +79,11 @@ export function GameCanvas() {
     buyAsset,
     sellAsset,
     advanceDay,
+    buildDailySummary,
+    setGeminiReview,
+    setReviewStatus,
+    clearReviewChatMessages,
     resetGame,
-    aiTip,
     showBankModal,
     activeSuddenEvent,
     showSuddenEvent,
@@ -85,10 +91,8 @@ export function GameCanvas() {
     activeGameEvent,
     activeDailyEvents,
     handleEventChoice,
-    eventConsequences,
     maintenanceChargesToday,
     showMaintenancePopup,
-    showLesson,
     dismissMaintenancePopup,
     isGameOver,
     gameOverReason,
@@ -102,7 +106,8 @@ export function GameCanvas() {
   const [shakeTree, setShakeTree] = useState(false);
   const [coinPop, setCoinPop] = useState<number | null>(null);
   const [showSparkles, setShowSparkles] = useState(false);
-  const morningAwardRef = useRef<number>(0);
+  const menuBootstrappedRef = useRef(false);
+  const reviewRequestedForDayRef = useRef<number | null>(null);
 
   const wateringsLeft = Math.max(0, 3 - tree.timesWateredToday);
   const isModalBlockingMorningFlow =
@@ -111,8 +116,7 @@ export function GameCanvas() {
     inventoryOpen ||
     showBankModal ||
     showSuddenEvent ||
-    showMaintenancePopup ||
-    showLesson;
+    showMaintenancePopup;
   const suppressWeatherUi =
     phase !== "morning" || isModalBlockingMorningFlow || Boolean(activeGameEvent) || isGameOver;
   const closeBankPanel = () => {
@@ -125,7 +129,7 @@ export function GameCanvas() {
     closeBankPanel();
   };
   const openMorningPanel = (panel: "shop" | "missions" | "inventory" | "bank") => {
-    if (phase !== "morning" || showSuddenEvent || isGameOver || showLesson) return;
+    if (phase !== "morning" || showSuddenEvent || isGameOver || currentScreen !== "play") return;
 
     closeMorningPanels();
 
@@ -147,6 +151,7 @@ export function GameCanvas() {
     useGameStore.setState({ showBankModal: true });
   };
   const canWater =
+    currentScreen === "play" &&
     canWaterTree(tree, player.waterUnits) &&
     phase === "morning" &&
     !isModalBlockingMorningFlow &&
@@ -169,54 +174,26 @@ export function GameCanvas() {
   );
 
   const netWorth = player.wallet + savings.balance + inventoryValue;
+  const latestSummary = dailySummaries[dailySummaries.length - 1] ?? null;
 
   useEffect(() => {
-    if (morningAwardRef.current === currentDay) return;
-    morningAwardRef.current = currentDay;
-    const morningEarnings = Math.floor(
-      calculateTreeYield(
-        tree,
-        ownedAssets,
-        currentDay,
-        player.investmentBalance,
-        riskMeter,
-      ),
-    );
-    useGameStore.setState((state) => ({
-      player: {
-        ...state.player,
-        wallet: state.player.wallet + morningEarnings,
-        totalEarnings: state.player.totalEarnings + morningEarnings,
-      },
-    }));
-    window.setTimeout(() => setCoinPop(morningEarnings), 0);
-    window.setTimeout(() => setShowSparkles(true), 0);
-    window.setTimeout(() => setCoinPop(null), 1200);
-    window.setTimeout(() => setShowSparkles(false), 900);
-  }, [currentDay, ownedAssets, player.investmentBalance, riskMeter, tree]);
+    if (menuBootstrappedRef.current) return;
+    if (currentScreen !== "menu") {
+      useGameStore.setState({ currentScreen: "menu", isPlaying: false });
+    }
+    menuBootstrappedRef.current = true;
+  }, [currentScreen]);
 
   useEffect(() => {
-    if (phase !== "morning" || isGameOver || isModalBlockingMorningFlow) return;
-    const interval = window.setInterval(() => {
-      const autoYield = Math.floor(
-        calculateTreeYield(
-          tree,
-          ownedAssets,
-          currentDay,
-          player.investmentBalance,
-          riskMeter,
-        ) * AUTO_YIELD_MULTIPLIER,
-      );
-      useGameStore.setState((state) => ({
-        player: {
-          ...state.player,
-          wallet: state.player.wallet + autoYield,
-          totalEarnings: state.player.totalEarnings + autoYield,
-        },
-      }));
-      setCoinPop(autoYield);
-      window.setTimeout(() => setCoinPop(null), 900);
-    }, 4500);
+    if (
+      currentScreen !== "play" ||
+      phase !== "morning" ||
+      isGameOver ||
+      isModalBlockingMorningFlow
+    ) {
+      return;
+    }
+
     const timeout = window.setTimeout(
       () => {
         setShopOpen(false);
@@ -227,23 +204,68 @@ export function GameCanvas() {
       },
       GAME_CONFIG.MORNING_PHASE_DURATION_MS,
     );
-    return () => {
-      window.clearInterval(interval);
-      window.clearTimeout(timeout);
-    };
+    return () => window.clearTimeout(timeout);
   }, [
+    currentScreen,
     phase,
     isGameOver,
     isModalBlockingMorningFlow,
-    tree,
-    ownedAssets,
-    currentDay,
-    player.investmentBalance,
-    riskMeter,
   ]);
 
   useEffect(() => {
-    if (phase !== "events" || isGameOver) return;
+    if (currentScreen !== "play" || phase !== "night" || isGameOver) return;
+    if (reviewRequestedForDayRef.current === currentDay) return;
+
+    reviewRequestedForDayRef.current = currentDay;
+    const summary = buildDailySummary();
+    setReviewStatus("loading", null);
+    clearReviewChatMessages();
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/gemini/review", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ summary }),
+        });
+        const payload = (await response.json()) as {
+          review?: {
+            day: number;
+            summary: string;
+            exp: number;
+            suggestedQuestions: string[];
+            model?: string;
+          };
+          error?: string;
+        };
+
+        if (!response.ok || !payload.review) {
+          throw new Error(payload.error || "Failed to generate AI review");
+        }
+
+        setGeminiReview(payload.review);
+      } catch (error) {
+        setReviewStatus(
+          "error",
+          error instanceof Error ? error.message : "AI review is unavailable right now",
+        );
+      }
+    })();
+  }, [
+    currentScreen,
+    phase,
+    isGameOver,
+    currentDay,
+    buildDailySummary,
+    clearReviewChatMessages,
+    setGeminiReview,
+    setReviewStatus,
+  ]);
+
+  useEffect(() => {
+    if (currentScreen !== "play" || phase !== "events" || isGameOver) return;
     if (!activeGameEvent && activeDailyEvents.length === 0) {
       const timeout = window.setTimeout(() => {
         setShopOpen(false);
@@ -254,7 +276,7 @@ export function GameCanvas() {
       }, 1000);
       return () => window.clearTimeout(timeout);
     }
-  }, [phase, activeGameEvent, activeDailyEvents.length, isGameOver]);
+  }, [currentScreen, phase, activeGameEvent, activeDailyEvents.length, isGameOver]);
 
   const missions = useMemo(
     () => [
@@ -326,6 +348,7 @@ export function GameCanvas() {
   };
 
   const onStartNewDay = () => {
+    reviewRequestedForDayRef.current = null;
     setPhase("sunrise");
     window.setTimeout(() => {
       advanceDay();
@@ -334,11 +357,14 @@ export function GameCanvas() {
     }, 1200);
   };
 
+  if (currentScreen === "menu") {
+    return <GameMenu />;
+  }
+
   return (
     <>
       <WeatherManager />
       <WeatherOverlay suppressUi={suppressWeatherUi} />
-      <DailyLesson />
       <div
         className={`relative h-screen w-full overflow-hidden bg-gradient-to-b ${bgClass} transition-all duration-1000 ease-in-out`}
       >
@@ -349,6 +375,8 @@ export function GameCanvas() {
           water={player.waterUnits}
           wateringsLeft={wateringsLeft}
           savings={savings.balance}
+          playerLevel={playerLevel}
+          leaderboard={leaderboard}
           riskMeter={riskMeter}
           riskLevel={riskLevel}
           onBankClick={() => openMorningPanel("bank")}
@@ -359,6 +387,7 @@ export function GameCanvas() {
           whileHover={{ scale: 1.1, rotate: 180 }}
           whileTap={{ scale: 0.9 }}
           onClick={() => {
+            reviewRequestedForDayRef.current = null;
             closeMorningPanels();
             setPhase("morning");
             resetGame();
@@ -453,14 +482,7 @@ export function GameCanvas() {
         {/* Night Lesson Bubble */}
         <AnimatePresence>
           {phase === "night" && (
-            <NightLessonBubble
-              tip={aiTip}
-              onContinue={onStartNewDay}
-              treeHealth={treeHealth.value}
-              riskMeter={riskMeter}
-              consequences={eventConsequences}
-              day={currentDay}
-            />
+            <NightLessonBubble onContinue={onStartNewDay} summary={latestSummary} />
           )}
         </AnimatePresence>
 
@@ -516,7 +538,7 @@ export function GameCanvas() {
         </AnimatePresence>
 
         <AnimatePresence>
-          {showSuddenEvent && activeSuddenEvent && !showLesson && phase === "morning" && (
+          {showSuddenEvent && activeSuddenEvent && phase === "morning" && (
             <SuddenEventModal
               event={activeSuddenEvent}
               onSelect={resolveSuddenEvent}
@@ -547,7 +569,6 @@ export function GameCanvas() {
         <AnimatePresence>
           {showMaintenancePopup &&
             maintenanceChargesToday.length > 0 &&
-            !showLesson &&
             !showSuddenEvent &&
             phase === "morning" && (
             <MaintenancePopup
@@ -563,6 +584,7 @@ export function GameCanvas() {
               reason={gameOverReason}
               netWorth={netWorth}
               onRestart={() => {
+                reviewRequestedForDayRef.current = null;
                 closeMorningPanels();
                 setPhase("morning");
                 resetGame();
@@ -582,6 +604,8 @@ function TopHUD({
   water,
   wateringsLeft,
   savings,
+  playerLevel,
+  leaderboard,
   riskMeter,
   riskLevel,
   onBankClick,
@@ -591,10 +615,14 @@ function TopHUD({
   water: number;
   wateringsLeft: number;
   savings: number;
+  playerLevel: number;
+  leaderboard: Array<{ id: string; name: string; level: number; score: number; trend: "up" | "down" | "steady" }>;
   riskMeter: number;
   riskLevel: "low" | "medium" | "high";
   onBankClick: () => void;
 }) {
+  const topTwo = [...leaderboard].sort((a, b) => b.score - a.score).slice(0, 2);
+
   return (
     <motion.div 
       initial={{ y: -50, opacity: 0 }}
@@ -651,6 +679,14 @@ function TopHUD({
           <span className="text-2xl">🏦</span>
           <span className="text-xl font-black text-green-700">₹{savings}</span>
         </motion.button>
+        <motion.div
+          className="rounded-xl bg-violet-100 px-3 py-2 text-center"
+          animate={{ scale: [1, 1.04, 1] }}
+          transition={{ duration: 2.3, repeat: Infinity }}
+        >
+          <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600">Level</p>
+          <p className="text-xl font-black text-violet-800">{playerLevel}</p>
+        </motion.div>
         <motion.div className="min-w-40 rounded-xl bg-slate-100 px-3 py-2">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Risk {riskLevel}</p>
           <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -662,6 +698,14 @@ function TopHUD({
             />
           </div>
         </motion.div>
+        <div className="min-w-40 rounded-xl bg-white px-3 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-600">Leaderboard</p>
+          {topTwo.map((entry) => (
+            <p key={entry.id} className="text-xs font-semibold text-slate-700">
+              {entry.name} L{entry.level}
+            </p>
+          ))}
+        </div>
       </div>
     </motion.div>
   );
@@ -1161,109 +1205,13 @@ function BankingInterfaceModal({
 
 // Enhanced Night Lesson Bubble
 function NightLessonBubble({
-  tip,
+  summary,
   onContinue,
-  treeHealth,
-  riskMeter,
-  consequences,
-  day,
 }: {
-  tip: string | null;
+  summary: DailySummary | null;
   onContinue: () => void;
-  treeHealth: number;
-  riskMeter: number;
-  consequences: Array<{ id: string; icon: string; title: string; summary: string }>;
-  day: number;
 }) {
-  /**
-   * Generates and downloads a local PNG summary card for family sharing.
-   * This relies on Canvas API support and may fail silently if canvas context
-   * is unavailable in restricted browser environments.
-   */
-  const shareWithFamily = () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 900;
-    canvas.height = 500;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.fillStyle = "#E0F2FE";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#166534";
-    ctx.font = "bold 60px sans-serif";
-    ctx.fillText("🌳 Growtopia Day Summary", 70, 90);
-    ctx.font = "bold 40px sans-serif";
-    ctx.fillText(`Tree Health: ${treeHealth}%`, 70, 180);
-    ctx.fillText(`Risk Meter: ${riskMeter}%`, 70, 240);
-    ctx.fillText(`Top Choice: ${consequences.at(-1)?.summary ?? "Steady day"}`, 70, 300);
-    const link = document.createElement("a");
-    link.download = `growtopia-day-${day}.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  };
-
-  return (
-    <motion.div
-      className="absolute inset-0 z-40 flex items-end justify-center bg-gradient-to-b from-black/30 to-black/50 backdrop-blur-sm p-4 pb-12"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-    >
-      <motion.div
-        className="w-full max-w-2xl rounded-3xl bg-gradient-to-br from-white via-indigo-50 to-purple-50 p-6 shadow-2xl md:p-8"
-        initial={{ y: 50, scale: 0.95, opacity: 0 }}
-        animate={{ y: 0, scale: 1, opacity: 1 }}
-        exit={{ y: 30, scale: 0.95, opacity: 0 }}
-        style={{
-          boxShadow: "0 25px 60px rgba(0,0,0,0.3), 0 0 100px rgba(99, 102, 241, 0.2)",
-        }}
-      >
-        {/* Animated Owl */}
-        <motion.div 
-          className="mb-4 text-center"
-          animate={{ 
-            rotate: [0, -5, 5, 0],
-            scale: [1, 1.1, 1],
-          }}
-          transition={{ duration: 3, repeat: Infinity }}
-        >
-          <span className="text-7xl">🦉</span>
-        </motion.div>
-
-        {/* Speech Bubble */}
-        <div className="relative rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 p-5 mb-6">
-          <div className="absolute -bottom-3 left-16 w-6 h-6 bg-indigo-100 transform rotate-45" />
-          <p className="text-center text-xl font-bold text-indigo-900 relative z-10">
-            {tip ?? "Great choices today! Keep balancing saving and investing. 💫"}
-          </p>
-        </div>
-
-        {/* Continue Button with glow */}
-        <ConsequenceReel items={consequences} />
-        <button
-          onClick={shareWithFamily}
-          aria-label="Share with Family"
-          className="mt-4 w-full rounded-2xl bg-gradient-to-r from-sky-500 to-indigo-600 py-3 text-lg font-black text-white"
-        >
-          📸 Share with Family
-        </button>
-        <motion.button
-          whileHover={{ scale: 1.03, y: -2 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={onContinue}
-          className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 py-5 text-2xl font-black text-white shadow-xl hover:shadow-emerald-500/40 transition-shadow"
-          animate={{
-            boxShadow: ["0 0 0px rgba(16, 185, 129, 0)", "0 0 40px rgba(16, 185, 129, 0.5)", "0 0 0px rgba(16, 185, 129, 0)"]
-          }}
-          transition={{ duration: 2, repeat: Infinity }}
-        >
-          <span className="flex items-center justify-center gap-3">
-            <span className="text-3xl">☀️</span>
-            <span>Start New Day</span>
-          </span>
-        </motion.button>
-      </motion.div>
-    </motion.div>
-  );
+  return <AIDayReview isOpen summary={summary} onContinue={onContinue} />;
 }
 
 // Spectacular Sunrise Overlay

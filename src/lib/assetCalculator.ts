@@ -94,7 +94,7 @@ export function updateAssetValues(
           : undefined,
     };
 
-    // Check smartphone storm trigger
+    // Check storm trigger for high-risk depreciating assets
     if (asset.stormTriggerDay && !asset.hasTriggeredStorm) {
       const daysSincePurchase = currentDay - asset.purchaseDay;
       if (daysSincePurchase >= asset.stormTriggerDay) {
@@ -145,7 +145,7 @@ export function calculateDailyMaintenanceBreakdown(
     const growthFactor =
       asset.name.includes("Car")
         ? 1.22
-        : asset.name.includes("Smartphone")
+        : asset.id === "creator-kit"
           ? 1.28
           : 1.18;
 
@@ -173,9 +173,9 @@ export function calculateDailyMaintenanceBreakdown(
 export function getMaintenanceDue(assets: Asset[], currentDay: number): Array<{
   asset: Asset;
   cost: number;
-  type: "car" | "smartphone";
+  type: "car" | "gadget";
 }> {
-  const maintenanceDue: Array<{ asset: Asset; cost: number; type: "car" | "smartphone" }> = [];
+  const maintenanceDue: Array<{ asset: Asset; cost: number; type: "car" | "gadget" }> = [];
 
   for (const asset of assets) {
     // Car maintenance check
@@ -267,7 +267,7 @@ export function purchaseAsset(
     boostExpired: false,
   };
 
-  // Add smartphone-specific properties
+  // Add storm-risk properties for creator kit style assets
   if (marketAsset.stormChanceBoost) {
     asset.stormChanceBoost = marketAsset.stormChanceBoost;
     asset.stormTriggerDay = marketAsset.stormTriggerDay;

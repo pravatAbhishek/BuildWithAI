@@ -56,7 +56,7 @@ export const GAME_CONFIG = {
   // Asset maintenance intervals
   CAR_MAINTENANCE_INTERVAL: 15, // Every 15 days
   CAR_MAINTENANCE_BASE_COST: 2, // Starting maintenance cost (doubles each time)
-  SMARTPHONE_MAINTENANCE_COST: 400, // One-time repair after storm
+  GADGET_MAINTENANCE_COST: 400, // One-time repair after storm
   MAX_EVENTS_PER_DAY: 3,
   TEMPTATION_SAVINGS_THRESHOLD: 300,
   MORNING_PHASE_DURATION_MS: 30000,
@@ -323,8 +323,8 @@ export const EVENT_TEMPLATES: Event[] = [
 export const MARKET_ASSETS = [
   // Depreciating Assets
   {
-    id: "smartphone",
-    name: "📱 Smartphone",
+    id: "creator-kit",
+    name: "🎥 Creator Kit",
     type: "depreciating" as const,
     description: "High earnings for 2 days, then repairs and maintenance rise quickly.",
     basePrice: 1000,

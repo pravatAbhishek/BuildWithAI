@@ -72,6 +72,26 @@ export function Tree() {
           {getTreeEmoji()}
         </motion.div>
 
+        {tree.health > 70 && (
+          <div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2">
+            {["🍃", "✨", "🍀"].map((icon, idx) => (
+              <motion.span
+                key={icon + idx}
+                className="absolute text-2xl"
+                style={{ left: `${idx * 26 - 20}px` }}
+                animate={{
+                  y: [0, -22 - idx * 6, -48 - idx * 10],
+                  opacity: [0, 1, 0],
+                  x: [0, idx % 2 === 0 ? 8 : -8, 0],
+                }}
+                transition={{ duration: 2 + idx * 0.5, repeat: Infinity, delay: idx * 0.45 }}
+              >
+                {icon}
+              </motion.span>
+            ))}
+          </div>
+        )}
+
         {/* Water animation */}
         {isWatering && (
           <div className="absolute top-1/4 left-1/2 -translate-x-1/2 text-4xl animate-bounce">
@@ -101,7 +121,7 @@ export function Tree() {
           onClick={handleWater}
           disabled={!canWater || isWatering}
           size="lg"
-          className="w-full"
+          className="w-full text-lg"
         >
           {isWatering
             ? "💧 Watering..."

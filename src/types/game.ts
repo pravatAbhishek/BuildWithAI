@@ -85,7 +85,7 @@ export interface Asset {
   maintenanceCost?: number; // Cost after boost period
   boostExpired?: boolean;
 
-  // For smartphone - storm mechanic
+  // For high-risk gadget assets - storm mechanic
   stormChanceBoost?: number; // Increased storm chance
   stormTriggerDay?: number; // Days until storm chance increases
   hasTriggeredStorm?: boolean; // Whether storm boost is active
@@ -347,7 +347,7 @@ export interface GameState {
   isGameOver: boolean;
   gameOverReason: string | null;
 
-  // Storm chance modifier (from smartphone)
+  // Storm chance modifier (from high-risk assets)
   stormChanceModifier: number;
 
   // Game flow

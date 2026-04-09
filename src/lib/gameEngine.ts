@@ -224,3 +224,25 @@ export function calculateStormChance(assets: Asset[], currentDay: number): numbe
 
   return Math.min(stormChance, 0.5); // Cap at 50%
 }
+
+/**
+ * Calculate inflation drag on liquid cash.
+ */
+export function calculateInflationLoss(wallet: number, inflationRate: number): number {
+  if (wallet <= 0 || inflationRate <= 0) return 0;
+  return Math.floor(wallet * inflationRate);
+}
+
+/**
+ * Apply inflation loss to liquid cash while leaving long-term holdings untouched.
+ */
+export function applyInflationToCash(
+  wallet: number,
+  inflationRate: number,
+): { adjustedWallet: number; loss: number } {
+  const loss = calculateInflationLoss(wallet, inflationRate);
+  return {
+    adjustedWallet: wallet - loss,
+    loss,
+  };
+}

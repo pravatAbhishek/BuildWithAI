@@ -1,7 +1,12 @@
 # 🌱 Growtopia
 
-Growtopia is a kid-friendly financial learning game built with Next.js, TypeScript, Zustand, and Framer Motion.  
-Players earn by watering a tree, then learn saving/investing through Savings, FD, SIP, and asset choices.
+Growtopia is an event-driven financial literacy game for teens, built with Next.js 16, TypeScript, Zustand, and Framer Motion.
+
+Core loop:
+1. Water the Prosperity Tree to earn.
+2. Face realistic temptations/events with consequences.
+3. Manage savings/FD/SIP/assets.
+4. End day with AI review + EXP + level progression.
 
 ---
 
@@ -24,17 +29,16 @@ npm run start
 
 ---
 
-## Current Gameplay Rules (Important)
+## Current Gameplay Rules (Configured)
 
-These are the **actual configured values**:
-
-- Initial wallet: `₹0`
-- Initial water: `10 drops`
-- Earning per watering: base `₹120` (further affected by health/level/assets)
+- Initial wallet: `₹100`
+- Initial water: `5 drops`
+- Earning: only when watering the tree (no passive auto-income)
+- Base watering yield: `₹120` (modifiers from health/risk/assets/weather)
 - Water pricing:
   - `1` drop → `₹100`
   - `5` drops → `₹450`
-  - `10` drops → `₹900`
+  - `10` drops → `₹850`
 - Savings interest: `1%` daily
 - FD options:
   - 3 days: 5%
@@ -43,177 +47,131 @@ These are the **actual configured values**:
   - 30 days: 20%
 - SIP:
   - min amount: `₹50`
-  - intervals: daily / every 3 days / weekly
+  - intervals: 30 or 60 days
   - growth: `2%` per interval
+- Daily inflation: random `0.3%` to `0.8%` drag on liquid cash
+- EXP curve: `level = floor(totalEXP / 200) + 1`
 
 ---
 
-## How the App Is Structured
+## New Core Systems
 
-### 1) App entry (`src/app`)
+### 1) Menu-first flow
+- First screen is now a full menu (`GameMenu`) after load/reset.
+- Start button launches gameplay.
+- Reset button is disabled until at least one run has started.
 
-| File | Purpose |
-|---|---|
-| `src/app/page.tsx` | App home page; renders `GameCanvas` |
-| `src/app/layout.tsx` | Root HTML/body wrapper and metadata |
-| `src/app/globals.css` | Global styles + animation utilities |
-| `src/app/api/game/route.ts` | Server API endpoint for game data |
-| `src/app/api/lesson/route.ts` | Server API endpoint for lesson content |
-| `src/app/api/market/route.ts` | Server API endpoint for market data |
+### 2) Full reset behavior
+- `resetGame()` clears:
+  - Zustand persisted storage
+  - localStorage entries containing `growtopia`
+  - daily summaries, events, assets, FD/SIP, leaderboard progress, review/chat state
+- Returns to menu screen with fresh starter values.
 
-### 2) Main game UI (`src/components/game`)
+### 3) AI-powered Night Review (Gemini)
+- End of each day builds and stores a `DailySummary` object.
+- Summary is saved in Zustand + localStorage (`growtopia-daily-summaries`).
+- Server route `/api/gemini/review` calls Gemini with full game context.
+- Review includes:
+  - short friendly summary
+  - EXP (`0-100`)
+  - 2-3 suggested follow-up questions
+- In-modal chat allows follow-up questions to Gemini.
 
-| File | Purpose |
-|---|---|
-| `GameCanvas.tsx` | **Primary game screen** and flow orchestration (morning → evening → night → sunrise) |
-| `WeatherManager.tsx` | Weather state/event handling bridge |
-| `WeatherOverlay.tsx` | Renders weather effects + compact weather notifications (storm charge summary appears here) |
-| `RainEffect.tsx` / `StormEffect.tsx` / `DroughtEffect.tsx` | Individual weather visuals |
-| `GameHUD.tsx` | Legacy HUD UI |
-| `Tree.tsx` | Legacy tree interaction UI |
-| `WaterShop.tsx` | Legacy standalone water purchase panel |
-| `ShopOverlay.tsx` | Legacy shop modal flow |
-| `EndDayScreen.tsx` / `EndOfDayModal.tsx` | Legacy end-of-day flows |
-| `Sky.tsx` / `Ground.tsx` / `Sapling.tsx` / `BackgroundTree.tsx` | Legacy scene pieces and decorative visuals |
-| `GameStats.tsx` | Legacy summary/stats panel |
-| `AIAdvisor.tsx` | Legacy advisor tip bubble |
-| `index.ts` | Re-exports game components |
+### 4) Event-driven consequence system
+- Realistic temptation events (Asset Discount, Quick FD Bonus, Delay Payment, Risky Trade, etc.)
+- Accepted temptations schedule future consequence events via `pendingEvents`.
+- Life-skewed risk teaches delayed costs and resilience.
 
-> **Target this first for UI/flow work:** `src/components/game/GameCanvas.tsx`
-
-### 3) Banking UI (`src/components/banking`)
-
-| File | Purpose |
-|---|---|
-| `BankPanel.tsx` | Banking tabs container (Savings + Invest) |
-| `SavingsAccount.tsx` | Deposit/withdraw savings interactions |
-| `FixedDeposit.tsx` | FD + SIP creation and management UI |
-| `index.ts` | Re-exports banking components |
-
-> **Target this for financial product UI changes:** `src/components/banking/*`
-
-### 4) Asset UI (`src/components/assets`)
-
-| File | Purpose |
-|---|---|
-| `AssetShop.tsx` | Legacy asset buying panel |
-| `AssetCard.tsx` | Shared card for market/owned assets |
-| `Portfolio.tsx` | Owned-asset portfolio list |
-| `index.ts` | Re-exports assets components |
-
-### 5) Lessons UI (`src/components/lesson`)
-
-| File | Purpose |
-|---|---|
-| `DailyLesson.tsx` | Daily review modal (good decisions + improvements + tip) |
-| `index.ts` | Re-exports lesson components |
-
-### 6) Shared UI primitives (`src/components/ui`)
-
-| File | Purpose |
-|---|---|
-| `Button.tsx` | Reusable button variants |
-| `Card.tsx` | Reusable card wrapper |
-| `Modal.tsx` | Reusable modal container |
-| `ProgressBar.tsx` | Reusable progress meter |
-| `index.ts` | Re-exports UI primitives |
+### 5) Inflation teaching
+- Daily inflation loss applied to wallet.
+- FD/SIP/assets remain the long-term defense path.
+- Inflation effect is included in daily summaries and AI review context.
 
 ---
 
-## Core Game Logic (Where Behavior Lives)
+## Project Structure
+
+### App + APIs (`src/app`)
 
 | File | Purpose |
 |---|---|
-| `src/store/gameStore.ts` | **Single source of truth** for game state/actions (Zustand + persist) |
-| `src/lib/constants.ts` | All configuration values: pricing, rates, asset configs |
-| `src/lib/gameEngine.ts` | Earnings, watering checks, water costs, weather modifiers |
-| `src/lib/bankingLogic.ts` | Savings/FD/SIP calculations and helper logic |
-| `src/lib/assetCalculator.ts` | Asset appreciation/depreciation/maintenance logic |
-| `src/types/game.ts` | Strongly-typed interfaces for state, actions, assets, lessons |
+| `src/app/page.tsx` | Renders `GameCanvas` |
+| `src/app/layout.tsx` | Root layout + metadata |
+| `src/app/globals.css` | Global animation/style utilities |
+| `src/app/api/gemini/review/route.ts` | Secure server Gemini review + chat proxy |
+| `src/app/api/game/route.ts` | Placeholder game API |
+| `src/app/api/lesson/route.ts` | Legacy lesson API |
+| `src/app/api/market/route.ts` | Market API |
 
-> **Target these for logic changes:** `store/gameStore.ts` + files in `lib/`.
+### Gameplay UI (`src/components/game`)
 
----
-
-## UI Layering and Modal Priority (Current)
-
-To avoid visual clashes, gameplay now follows strict display priority:
-
-1. Morning utility panels are single-open only: Shop, Quick Bank, Missions, and Inventory never stay open together.
-2. Morning auto-yield timer and automatic phase jump to events pause while blocking UI is open.
-3. Day-start overlays render in priority order:
-  - Daily lesson modal
-  - Sudden event modal
-  - Maintenance popup
-4. Weather notifications:
-  - Rain/Drought can use the active event card.
-  - Storm no longer shows a large emergency dialog.
-  - Storm emergency charges are auto-applied in state and summarized in the compact weather popup.
-
----
-
-## Runtime Flow Snapshot
-
-Use this when giving precise implementation instructions:
-
-1. `src/app/page.tsx` renders `GameCanvas`.
-2. `src/components/game/GameCanvas.tsx` controls phase flow, panel visibility rules, and modal gating.
-3. `src/components/game/WeatherManager.tsx` decides daily weather and triggers store weather events.
-4. `src/store/gameStore.ts` applies financial outcomes (storm emergency cost settlement, savings/FD/SIP updates, event outcomes).
-5. `src/components/game/WeatherOverlay.tsx` handles weather effects and compact event notifications.
-6. `src/components/lesson/DailyLesson.tsx` displays the day summary modal.
-
----
-
-## “Which File Should I Edit?” Guide
-
-| If you want to change... | Primary file(s) |
+| File | Purpose |
 |---|---|
-| Main gameplay flow/timers/phases | `src/components/game/GameCanvas.tsx` |
-| Balancing numbers (rates, prices, defaults) | `src/lib/constants.ts` |
-| How earning or watering is calculated | `src/lib/gameEngine.ts` |
-| Savings/FD/SIP math | `src/lib/bankingLogic.ts` |
-| Asset growth/decay/maintenance behavior | `src/lib/assetCalculator.ts` |
-| Central game state transitions/actions | `src/store/gameStore.ts` |
-| Daily lesson/review content format | `src/store/gameStore.ts` + `src/components/lesson/DailyLesson.tsx` |
-| Banking panel UI | `src/components/banking/*` |
-| Weather visuals | `src/components/game/*Effect.tsx` + `WeatherOverlay.tsx` |
-| UI overlap / modal collision fixes | `src/components/game/GameCanvas.tsx` + `src/components/game/WeatherOverlay.tsx` |
-| Global animations/theme classes | `src/app/globals.css` |
+| `src/components/game/GameCanvas.tsx` | Main orchestrator (menu handoff, phase flow, events, night review trigger) |
+| `src/components/game/WeatherManager.tsx` | Daily weather trigger logic |
+| `src/components/game/WeatherOverlay.tsx` | Weather effects + compact notifications |
+| `src/components/game/EventCard.tsx` | Event decision modal |
+| `src/components/game/Tree.tsx` | Legacy tree visual with upgraded animations |
+
+### Menu + Review UI
+
+| File | Purpose |
+|---|---|
+| `src/components/menu/GameMenu.tsx` | Full-screen menu with Start, Reset, level badge, dummy leaderboard |
+| `src/components/lesson/AIDayReview.tsx` | Night AI review modal + suggested questions + chat |
+| `src/components/lesson/DailyLesson.tsx` | Compatibility re-export to `AIDayReview` |
+
+### Logic + State
+
+| File | Purpose |
+|---|---|
+| `src/store/gameStore.ts` | Zustand source of truth (menu state, summaries, AI review, EXP/level, reset, inflation flow) |
+| `src/lib/constants.ts` | Config + event templates + inflation bounds |
+| `src/lib/eventSystem.ts` | Daily event generation, pending-event resolution, temptation helper, inflation-rate pick |
+| `src/lib/gameEngine.ts` | Tree yield/watering + inflation cash helpers |
+| `src/lib/bankingLogic.ts` | Savings/FD/SIP + inflation-adjusted helper utilities |
+| `src/lib/assetCalculator.ts` | Asset valuation and maintenance scaling |
+| `src/types/game.ts` | Extended types (`DailySummary`, `GeminiReview`, `PlayerLevel`, `InflationRate`, etc.) |
 
 ---
 
-## Architecture Notes
+## Runtime Flow (Now)
 
-1. UI components trigger actions from `useGameStore()`.
-2. Store actions call pure logic helpers in `src/lib/*`.
-3. Types in `src/types/game.ts` keep state/actions consistent.
-4. Zustand persist stores progress in local storage.
-
-This separation helps you change visuals without touching logic, or change logic without rewriting UI.
+1. Load app → menu screen.
+2. Tap Start Journey → morning gameplay.
+3. Morning → Events (1-3 event cards) → Evening Banking.
+4. Night:
+   - build daily summary JSON
+   - apply daily inflation impact
+   - request Gemini review
+   - display EXP + chat review modal
+5. Next Day button advances to new morning.
 
 ---
 
-## Development Tips
+## Environment
 
-1. Prefer updating `constants.ts` for balance tweaks instead of hardcoding values.
-2. Keep heavy calculations in `lib/*` and use components only for rendering/interactions.
-3. If adding a new feature, update in this order:
-   1. `types/game.ts`
-   2. `lib/*` logic
-   3. `store/gameStore.ts` action wiring
-   4. `components/*` UI
+Create `.env.local` with:
+
+```bash
+GEMINI_API_KEY=your_key_here
+# optional
+GEMINI_MODEL=gemini-1.5-flash
+```
+
+Gemini key is server-only and never exposed to the client.
 
 ---
 
 ## Tech Stack
 
 - Next.js 16 (App Router)
-- TypeScript (strict mode)
-- Zustand (state + persistence)
-- Framer Motion (animations)
-- Tailwind CSS 4 (styling)
+- TypeScript
+- Zustand + persist
+- Framer Motion
+- Tailwind CSS 4
 
 ---
 
-Built for playful early-age financial learning. 🌟
+Built for visual, consequence-driven money learning. 🌟
