@@ -2,6 +2,7 @@
 
 import { GAME_CONFIG } from "./constants";
 import type { Tree, Player, Asset, SaplingStage } from "@/types/game";
+import { getDepreciatingYieldMultiplier } from "@/lib/assetCalculator";
 
 const MAX_INVESTMENT_BONUS = 0.35;
 const INVESTMENT_BONUS_CAPITAL = 5000;
@@ -28,16 +29,15 @@ export function calculateTreeYield(
 
   // Asset boost from depreciating assets
   let assetBoost = 1;
+  let appreciatingBoost = 1;
   for (const asset of assets) {
-    if (
-      asset.type === "depreciating" &&
-      asset.boostMultiplier &&
-      !asset.boostExpired
-    ) {
-      const daysSincePurchase = currentDay - asset.purchaseDay;
-      if (daysSincePurchase < (asset.boostDuration || 0)) {
-        assetBoost *= asset.boostMultiplier;
-      }
+    if (asset.type === "depreciating") {
+      assetBoost *= getDepreciatingYieldMultiplier(asset, currentDay);
+    }
+
+    if (asset.type === "appreciating" && asset.appreciationRate) {
+      // Appreciating assets provide permanent daily earning boost.
+      appreciatingBoost *= 1 + asset.appreciationRate;
     }
   }
 
@@ -47,7 +47,7 @@ export function calculateTreeYield(
     1 - Math.min(MAX_RISK_PENALTY, Math.max(0, recentRiskMeter) / RISK_PENALTY_SCALE);
 
   return Math.floor(
-    baseYield * healthMultiplier * levelBonus * assetBoost * investmentBonus * riskPenalty,
+    baseYield * healthMultiplier * levelBonus * assetBoost * appreciatingBoost * investmentBonus * riskPenalty,
   );
 }
 
@@ -157,8 +157,8 @@ export function createInitialPlayer(name: string = "Player"): Player {
   return {
     id: crypto.randomUUID(),
     name,
-    wallet: GAME_CONFIG.INITIAL_MONEY, // Now 0
-    waterUnits: GAME_CONFIG.INITIAL_WATER, // 10 drops
+    wallet: GAME_CONFIG.INITIAL_MONEY,
+    waterUnits: GAME_CONFIG.INITIAL_WATER,
     currentDay: 1,
     totalEarnings: 0,
     bankBalance: 0,
@@ -189,15 +189,12 @@ export function applyWeatherModifier(
 ): number {
   switch (weatherType) {
     case "rain":
-      // Rain is a good event and adds a small per-watering bonus.
       return Math.floor(earnings * (1 + GAME_CONFIG.WEATHER_RAIN_BONUS));
     case "drought":
-      // Drought reduces earnings
       return Math.floor(
         earnings * (1 - GAME_CONFIG.WEATHER_DROUGHT_PENALTY),
       );
     case "storm":
-      // Storm reduces earnings
       return Math.floor(
         earnings * (1 - GAME_CONFIG.WEATHER_STORM_PENALTY),
       );

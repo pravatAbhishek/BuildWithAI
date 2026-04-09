@@ -1,14 +1,6 @@
-# 🌱 Growtopia
+# Growtopia
 
-Growtopia is an event-driven financial literacy game for teens, built with Next.js 16, TypeScript, Zustand, and Framer Motion.
-
-Core loop:
-1. Water the Prosperity Tree to earn.
-2. Face realistic temptations/events with consequences.
-3. Manage savings/FD/SIP/assets.
-4. End day with AI review + EXP + level progression.
-
----
+Growtopia is a visual, event-driven financial literacy game for 14-15 year olds built with Next.js 16, TypeScript, Zustand, and Framer Motion.
 
 ## Quick Start
 
@@ -17,9 +9,9 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open http://localhost:3000
 
-Other scripts:
+Other commands:
 
 ```bash
 npm run lint
@@ -27,151 +19,145 @@ npm run build
 npm run start
 ```
 
----
+## Fixed Gameplay Values
 
-## Current Gameplay Rules (Configured)
-
-- Initial wallet: `₹100`
-- Initial water: `5 drops`
-- Earning: only when watering the tree (no passive auto-income)
-- Base watering yield: `₹120` (modifiers from health/risk/assets/weather)
-- Water pricing:
-  - `1` drop → `₹100`
-  - `5` drops → `₹450`
-  - `10` drops → `₹850`
-- Savings interest: `1%` daily
-- FD options:
+- Starting wallet: ₹100
+- Starting water drops: 5
+- Automatic per-second income: none
+- Base tree earning: ₹120 per watering
+- Savings interest: 1% daily
+- FD rates:
   - 3 days: 5%
   - 7 days: 8%
   - 15 days: 12%
   - 30 days: 20%
-- SIP:
-  - min amount: `₹50`
-  - intervals: 30 or 60 days
-  - growth: `2%` per interval
-- Daily inflation: random `0.3%` to `0.8%` drag on liquid cash
-- EXP curve: `level = floor(totalEXP / 200) + 1`
+- SIP growth: 2% per interval
+- Inflation: 0.5% daily on cash only
+- Mandatory night EXP: 25
+- Gemini extra EXP: 0-75
+- Level formula: floor(totalEXP / 250) + 1
 
----
+## Strict Daily Flow
 
-## New Core Systems
+1. Morning
+- Weather appears (Rain / Storm / Drought)
+- Watering phase and visual auto-watering sequence
 
-### 1) Menu-first flow
-- First screen is now a full menu (`GameMenu`) after load/reset.
-- Start button launches gameplay.
-- Reset button is disabled until at least one run has started.
+2. Event
+- Exactly one event pop-up per day
+- Big icon + clear advantage/disadvantage + 2 choices
 
-### 2) Full reset behavior
-- `resetGame()` clears:
-  - Zustand persisted storage
-  - localStorage entries containing `growtopia`
-  - daily summaries, events, assets, FD/SIP, leaderboard progress, review/chat state
-- Returns to menu screen with fresh starter values.
+3. Evening
+- Banking panel for Savings, FD, SIP, Assets (and Market when unlocked)
 
-### 3) AI-powered Night Review (Gemini)
-- End of each day builds and stores a `DailySummary` object.
-- Summary is saved in Zustand + localStorage (`growtopia-daily-summaries`).
-- Server route `/api/gemini/review` calls Gemini with full game context.
-- Review includes:
-  - short friendly summary
-  - EXP (`0-100`)
-  - 2-3 suggested follow-up questions
-- In-modal chat allows follow-up questions to Gemini.
+4. Night
+- Toggle: Generate AI Day Review? (default OFF)
+- Base 25 EXP always granted
+- If toggle ON, Gemini provides structured feedback and extra EXP
 
-### 4) Event-driven consequence system
-- Realistic temptation events (Asset Discount, Quick FD Bonus, Delay Payment, Risky Trade, etc.)
-- Accepted temptations schedule future consequence events via `pendingEvents`.
-- Life-skewed risk teaches delayed costs and resilience.
+## Weather Rules
 
-### 5) Inflation teaching
-- Daily inflation loss applied to wallet.
-- FD/SIP/assets remain the long-term defense path.
-- Inflation effect is included in daily summaries and AI review context.
+- Rain: no earning change
+- Storm: immediate wallet loss of ₹80 and tree health stress for 2 days
+- Drought: daily earnings reduced by 60%
+- Investments remain available during all weather
 
----
+## One-Event System
 
-## Project Structure
+Simple events are defined in `src/lib/simpleEventSystem.ts` and templates in `src/lib/constants.ts`.
 
-### App + APIs (`src/app`)
+Exact 8 events:
 
-| File | Purpose |
-|---|---|
-| `src/app/page.tsx` | Renders `GameCanvas` |
-| `src/app/layout.tsx` | Root layout + metadata |
-| `src/app/globals.css` | Global animation/style utilities |
-| `src/app/api/gemini/review/route.ts` | Secure server Gemini review + chat proxy |
-| `src/app/api/game/route.ts` | Placeholder game API |
-| `src/app/api/lesson/route.ts` | Legacy lesson API |
-| `src/app/api/market/route.ts` | Market API |
+1. Bike Offer
+- Advantage: +25% earning for 3 days
+- Disadvantage: Day+4 maintenance ₹120
 
-### Gameplay UI (`src/components/game`)
+2. Scooter Offer
+- Advantage: +18% earning for 2 days
+- Disadvantage: Day+3 repair ₹90
 
-| File | Purpose |
-|---|---|
-| `src/components/game/GameCanvas.tsx` | Main orchestrator (menu handoff, phase flow, events, night review trigger) |
-| `src/components/game/WeatherManager.tsx` | Daily weather trigger logic |
-| `src/components/game/WeatherOverlay.tsx` | Weather effects + compact notifications |
-| `src/components/game/EventCard.tsx` | Event decision modal |
-| `src/components/game/Tree.tsx` | Legacy tree visual with upgraded animations |
+3. Festival Gift Offer
+- Advantage: Spend ₹120 now, get ₹60 next day
+- Disadvantage: If savings buffer is weak next day, tree health -10
 
-### Menu + Review UI
+4. Delay Bill Offer
+- Advantage: +₹100 cash now
+- Disadvantage: Day+5 pay ₹130
 
-| File | Purpose |
-|---|---|
-| `src/components/menu/GameMenu.tsx` | Full-screen menu with Start, Reset, level badge, dummy leaderboard |
-| `src/components/lesson/AIDayReview.tsx` | Night AI review modal + suggested questions + chat |
-| `src/components/lesson/DailyLesson.tsx` | Compatibility re-export to `AIDayReview` |
+5. Emergency Friend Help
+- Advantage: Lend ₹80, possible return ₹110 in 4 days
+- Disadvantage: 40% chance return is only ₹40
 
-### Logic + State
+6. Quick FD Bonus Event
+- Advantage: Lock ₹150 for 7 days at 11% total return (8% + 3% bonus)
+- Disadvantage: Money is locked
 
-| File | Purpose |
-|---|---|
-| `src/store/gameStore.ts` | Zustand source of truth (menu state, summaries, AI review, EXP/level, reset, inflation flow) |
-| `src/lib/constants.ts` | Config + event templates + inflation bounds |
-| `src/lib/eventSystem.ts` | Daily event generation, pending-event resolution, temptation helper, inflation-rate pick |
-| `src/lib/gameEngine.ts` | Tree yield/watering + inflation cash helpers |
-| `src/lib/bankingLogic.ts` | Savings/FD/SIP + inflation-adjusted helper utilities |
-| `src/lib/assetCalculator.ts` | Asset valuation and maintenance scaling |
-| `src/types/game.ts` | Extended types (`DailySummary`, `GeminiReview`, `PlayerLevel`, `InflationRate`, etc.) |
+7. Appreciating Asset Discount
+- Advantage: Buy Village Shop for ₹200 instead of ₹280 (+15% permanent earning)
+- Disadvantage: none
 
----
+8. Car Offer
+- Advantage: +35% earning for 3 days
+- Disadvantage: Day+4 heavy maintenance ₹250
 
-## Runtime Flow (Now)
+## Asset Learning Descriptions
 
-1. Load app → menu screen.
-2. Tap Start Journey → morning gameplay.
-3. Morning → Events (1-3 event cards) → Evening Banking.
-4. Night:
-   - build daily summary JSON
-   - apply daily inflation impact
-   - request Gemini review
-   - display EXP + chat review modal
-5. Next Day button advances to new morning.
+Depreciating assets (Bike / Scooter / Car):
+- Gives quick boost to daily earnings for 2-3 days but will need costly repairs later.
 
----
+Appreciating assets (Village Shop / Green Energy):
+- Increases tree earnings permanently by 12-18% every day after purchase.
 
-## Environment
+## Bankrupt Rule
 
-Create `.env.local` with:
+If net worth goes below ₹0 (wallet + savings + FD value + SIP value + asset value), a full-screen Bankrupt state appears:
+
+- Message: You went bankrupt! Money management is tough, but you can try again.
+- Button: Restart from Beginning
+- Action: full `resetGame()` and return to menu
+
+## AI Review Contract
+
+API route: `src/app/api/gemini/review/route.ts`
+
+Review output structure:
+- Part 1: Good Things Done (2-3 bullets)
+- Part 2: Improvements (2-3 bullets)
+- Part 3: EXP Earned Today (number, max 75)
+
+Chat support:
+- Follow-up questions are supported inside the night review modal
+- Uses the same full game-aware system prompt context
+
+Environment:
 
 ```bash
 GEMINI_API_KEY=your_key_here
-# optional
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-2.0-flash
 ```
 
-Gemini key is server-only and never exposed to the client.
+## Stocks Feature
 
----
+- Locked until Level 8
+- After unlock: Market tab appears in BankPanel
+- Includes 4 sample stocks with Recharts line charts and daily news modal
 
-## Tech Stack
+## Key Files
+
+- `src/types/game.ts` - all models and state/action contracts
+- `src/lib/constants.ts` - fixed rules, 8 event templates, assets, stock data
+- `src/lib/simpleEventSystem.ts` - one event/day generation + pending consequence logic
+- `src/store/gameStore.ts` - core game state, EXP/leveling, bankrupt checks, reset, flow state
+- `src/components/game/GameCanvas.tsx` - strict morning->event->evening->night orchestration
+- `src/components/lesson/AIDayReview.tsx` - night review toggle, structured AI feedback, chat UI
+- `src/components/menu/GameMenu.tsx` - Start Journey, Reset Game, leaderboard
+- `src/components/banking/BankPanel.tsx` - Savings/Invest/Market tabs with level lock
+
+## Stack
 
 - Next.js 16 (App Router)
 - TypeScript
 - Zustand + persist
 - Framer Motion
 - Tailwind CSS 4
-
----
-
-Built for visual, consequence-driven money learning. 🌟
+- Recharts

@@ -24,7 +24,7 @@ export function AssetShop() {
             <span className="text-green-500">📈</span> Long-term Investments
           </h4>
           <p className="text-xs text-gray-500 mb-3">
-            These grow in value over time. Great for patient investors!
+            Increases tree earnings permanently by 12-18% every day after purchase.
           </p>
           <div className="space-y-3">
             {appreciatingAssets.map((asset) => (
@@ -47,7 +47,7 @@ export function AssetShop() {
             Carefully!)
           </h4>
           <p className="text-xs text-gray-500 mb-3">
-            Give temporary income boosts but need maintenance later. Be careful!
+            Gives quick boost to daily earnings for 2-3 days but will need costly repairs later.
           </p>
           <div className="space-y-3">
             {depreciatingAssets.map((asset) => (
@@ -66,8 +66,7 @@ export function AssetShop() {
         <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
           <p className="text-xs text-yellow-800">
             💡 <strong>Tip:</strong> Depreciating assets (like vehicles) give
-            great boosts at first, but they start costing you money for
-            maintenance after the boost period ends - just like real life!
+            great boosts at first, but costly repairs can hit after the boost period.
           </p>
         </div>
       </div>

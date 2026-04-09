@@ -7,11 +7,11 @@ import { Button, Card } from "@/components/ui";
 import { canWaterTree, calculateTreeYield } from "@/lib/gameEngine";
 
 export function Tree() {
-  const { tree, player, ownedAssets, waterTree } = useGameStore();
+  const { tree, player, ownedAssets, waterTree, isGameOver } = useGameStore();
   const [isWatering, setIsWatering] = useState(false);
   const [lastEarning, setLastEarning] = useState<number | null>(null);
 
-  const canWater = canWaterTree(tree, player.waterUnits);
+  const canWater = !isGameOver && canWaterTree(tree, player.waterUnits);
   const potentialEarning = calculateTreeYield(
     tree,
     ownedAssets,
@@ -136,6 +136,12 @@ export function Tree() {
         {!canWater && player.waterUnits === 0 && (
           <p className="text-sm text-orange-600 mt-2">
             Buy more water from the shop!
+          </p>
+        )}
+
+        {isGameOver && (
+          <p className="mt-2 text-sm font-semibold text-red-600">
+            Bankrupt! Restart from the menu to begin again.
           </p>
         )}
       </div>

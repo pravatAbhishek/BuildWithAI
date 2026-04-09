@@ -9,9 +9,17 @@ interface AIDayReviewProps {
   isOpen: boolean;
   summary: DailySummary | null;
   onContinue: () => void;
+  reviewEnabled: boolean;
+  onToggleReview: (enabled: boolean) => void;
 }
 
-export function AIDayReview({ isOpen, summary, onContinue }: AIDayReviewProps) {
+export function AIDayReview({
+  isOpen,
+  summary,
+  onContinue,
+  reviewEnabled,
+  onToggleReview,
+}: AIDayReviewProps) {
   const {
     latestGeminiReview,
     reviewStatus,
@@ -23,13 +31,14 @@ export function AIDayReview({ isOpen, summary, onContinue }: AIDayReviewProps) {
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
 
-  const expPercent = useMemo(
-    () => Math.max(0, Math.min(100, latestGeminiReview?.exp || 0)),
-    [latestGeminiReview?.exp],
-  );
+  const baseExp = 25;
+  const extraExp = Math.max(0, Math.min(75, latestGeminiReview?.exp || 0));
+  const totalExp = baseExp + (reviewEnabled ? extraExp : 0);
+  const expPercent = useMemo(() => Math.max(0, Math.min(100, totalExp)), [totalExp]);
 
   const askCoach = async (value: string) => {
     if (!summary) return;
+    if (!reviewEnabled) return;
     const trimmed = value.trim();
     if (!trimmed || sending) return;
 
@@ -103,24 +112,71 @@ export function AIDayReview({ isOpen, summary, onContinue }: AIDayReviewProps) {
 
             <div className="grid gap-4 px-6 py-5 md:grid-cols-[1fr_0.95fr]">
               <div className="space-y-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <label className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-black text-slate-800">Generate AI Day Review?</p>
+                      <p className="text-xs text-slate-600">Default OFF to save Gemini tokens.</p>
+                    </div>
+                    <button
+                      onClick={() => onToggleReview(!reviewEnabled)}
+                      className={`rounded-full px-4 py-2 text-xs font-black transition-colors ${
+                        reviewEnabled
+                          ? "bg-emerald-500 text-white"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {reviewEnabled ? "ON" : "OFF"}
+                    </button>
+                  </label>
+                </div>
+
                 {reviewStatus === "loading" ? (
                   <div className="rounded-2xl border border-sky-100 bg-white p-4">
                     <p className="text-sm font-semibold text-slate-700">🤖 Coach is analyzing your day...</p>
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-sky-100 bg-white p-4">
-                    <p className="text-sm leading-relaxed text-slate-700">
-                      {latestGeminiReview?.summary ||
-                        "🌙 Review loading completed. Keep balancing spending, savings, and investment discipline."}
-                    </p>
+                    {!reviewEnabled && (
+                      <p className="text-sm leading-relaxed text-slate-700">
+                        AI review is OFF. You still get base EXP for completing the day.
+                      </p>
+                    )}
+
+                    {reviewEnabled && (
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">
+                            Part 1: Good Things Done
+                          </p>
+                          <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                            {(latestGeminiReview?.goodThings || ["Progress is being analyzed..."]).map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-700">
+                            Part 2: Improvements
+                          </p>
+                          <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                            {(latestGeminiReview?.improvements || ["Coach suggestions will appear here."]).map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 <div className="rounded-2xl border border-emerald-100 bg-white p-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-black text-emerald-800">EXP Gain</p>
-                    <p className="text-lg font-black text-emerald-900">+{latestGeminiReview?.exp || 0}</p>
+                    <p className="text-sm font-black text-emerald-800">Part 3: EXP Earned Today</p>
+                    <p className="text-lg font-black text-emerald-900">+{totalExp}</p>
                   </div>
+                  <p className="mt-1 text-xs text-slate-600">Base +25 mandatory {reviewEnabled ? `+ Gemini +${extraExp}` : "+ Gemini +0"}</p>
                   <div className="mt-2 h-3 overflow-hidden rounded-full bg-emerald-100">
                     <motion.div
                       className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-lime-500"
@@ -134,7 +190,7 @@ export function AIDayReview({ isOpen, summary, onContinue }: AIDayReviewProps) {
                 <div className="rounded-2xl border border-amber-100 bg-white p-4">
                   <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Quick Ask</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {(latestGeminiReview?.suggestedQuestions || []).map((item) => (
+                    {(reviewEnabled ? latestGeminiReview?.suggestedQuestions : [])?.map((item) => (
                       <button
                         key={item}
                         onClick={() => askCoach(item)}
@@ -150,7 +206,10 @@ export function AIDayReview({ isOpen, summary, onContinue }: AIDayReviewProps) {
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Coach Chat</p>
                 <div className="mt-2 h-52 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
-                  {reviewChatMessages.length === 0 && (
+                  {!reviewEnabled && (
+                    <p className="px-2 py-3 text-xs text-slate-500">Turn ON review to unlock chat.</p>
+                  )}
+                  {reviewEnabled && reviewChatMessages.length === 0 && (
                     <p className="px-2 py-3 text-xs text-slate-500">Ask follow-up questions or tap Skip to continue.</p>
                   )}
                   {reviewChatMessages.map((message) => (
@@ -178,13 +237,14 @@ export function AIDayReview({ isOpen, summary, onContinue }: AIDayReviewProps) {
                     value={question}
                     onChange={(event) => setQuestion(event.target.value)}
                     placeholder="Ask the coach..."
+                    disabled={!reviewEnabled}
                     className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-400"
                   />
                   <button
                     type="submit"
-                    disabled={sending || reviewStatus === "loading"}
+                    disabled={!reviewEnabled || sending || reviewStatus === "loading"}
                     className={`rounded-xl px-3 py-2 text-sm font-bold ${
-                      sending || reviewStatus === "loading"
+                      !reviewEnabled || sending || reviewStatus === "loading"
                         ? "cursor-not-allowed bg-slate-200 text-slate-500"
                         : "bg-emerald-600 text-white hover:bg-emerald-700"
                     }`}

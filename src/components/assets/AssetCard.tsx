@@ -105,8 +105,7 @@ export function AssetCard({
                 </>
               ) : (
                 <>
-                  ⚠️ Boost expired. Maintenance: ₹{ownedAsset.maintenanceCost}
-                  /day
+                  ⚠️ Boost expired. Costly repairs may hit after the fast-growth period.
                 </>
               )}
             </div>

@@ -13,6 +13,26 @@ export type WeatherEvent = "none" | "rain" | "drought" | "storm";
 export type EventOutcomeQuality = "weak" | "balanced" | "strong" | "neutral";
 export type RiskLevel = "low" | "medium" | "high";
 export type ReviewStatus = "idle" | "loading" | "ready" | "error";
+export type UnlockFeature =
+  | "tree-growth"
+  | "water-usage"
+  | "coin-earning"
+  | "simple-scenarios"
+  | "savings-account"
+  | "extreme-weather"
+  | "investments"
+  | "risk-system"
+  | "shop-assets"
+  | "stock-market"
+  | "management-mode"
+  | "leaderboard"
+  | "bank-loans"
+  | "inventory";
+export type PendingConsequenceType =
+  | "wallet-delta"
+  | "tree-health-check"
+  | "friend-help-return"
+  | "fd-bonus-credit";
 
 export interface Player {
   id: string;
@@ -63,6 +83,12 @@ export interface SIP {
 }
 
 export type AssetType = "appreciating" | "depreciating";
+
+export interface AssetDescription {
+  id: string;
+  type: AssetType;
+  description: string;
+}
 
 export interface Asset {
   id: string;
@@ -147,15 +173,94 @@ export interface DailyDecision {
   wasTemptationAccepted: boolean;
 }
 
+export interface SimpleEventChoice {
+  id: string;
+  label: string;
+  icon: string;
+  cost?: number;
+}
+
+export interface SimpleEvent {
+  id: string;
+  title: string;
+  icon: string;
+  advantage: string;
+  disadvantage: string;
+  choices: SimpleEventChoice[];
+}
+
+export interface StockPoint {
+  day: string;
+  price: number;
+}
+
+export interface StockItem {
+  id: string;
+  symbol: string;
+  name: string;
+  points: StockPoint[];
+  dailyNews: string[];
+}
+
 export interface InflationRate {
   day: number;
   rate: number;
   cashPowerLoss: number;
 }
 
+export interface ActiveEffect {
+  id: string;
+  source: string;
+  type: "buff" | "debuff" | "neutral";
+  impactText: string;
+  remainingDays: number | null;
+  percentImpact?: number;
+}
+
+export interface EmergencyLoan {
+  id: string;
+  principal: number;
+  startDay: number;
+  dailyInterestRate: number;
+  totalPaid: number;
+  totalInterestPaid: number;
+}
+
+export interface LoanSnapshot {
+  loanTakenToday: number;
+  loanRepaidToday: number;
+  loanInterestPaidToday: number;
+  hasActiveLoan: boolean;
+  principal: number;
+  daysOutstanding: number;
+  outstandingAmount: number;
+}
+
+export interface FinancialBreakdown {
+  earningsToday: number;
+  weatherLossToday: number;
+  maintenancePaidToday: number;
+  inflationLossToday: number;
+  eventCashFlow: number;
+  savedToday: number;
+  investedToday: number;
+  loanTakenToday: number;
+  loanRepaidToday: number;
+  loanInterestPaidToday: number;
+  netCashFlow: number;
+}
+
+export interface PhaseUnlockModal {
+  fromPhase: number;
+  toPhase: number;
+  learned: string[];
+  unlockedFeatures: string[];
+}
+
 export interface DailySummary {
   id: string;
   currentDay: number;
+  currentPhase: number;
   decisions: DailyDecision[];
   treeHealth: number;
   walletBalance: number;
@@ -174,11 +279,17 @@ export interface DailySummary {
   maintenancePaid: number;
   weather: WeatherEvent;
   riskLevel: RiskLevel;
+  netWorth: number;
+  activeEffects: ActiveEffect[];
+  loanSnapshot: LoanSnapshot;
+  financialBreakdown: FinancialBreakdown;
 }
 
 export interface GeminiReview {
   day: number;
   summary: string;
+  goodThings?: string[];
+  improvements?: string[];
   exp: number;
   suggestedQuestions: string[];
   model?: string;
@@ -238,6 +349,11 @@ export interface PendingEvent {
   eventId: string;
   executeOnDay: number;
   reason?: string;
+  type?: PendingConsequenceType;
+  amount?: number;
+  successAmount?: number;
+  failureAmount?: number;
+  successChance?: number;
 }
 
 export interface TreeHealth {
@@ -303,6 +419,7 @@ export interface GameState {
   reviewChatMessages: GeminiChatMessage[];
   reviewStatus: ReviewStatus;
   reviewError: string | null;
+  aiReviewEnabled: boolean;
   lastAwardedReviewDay: number;
   leaderboard: LeaderboardEntry[];
   hasPlayed: boolean;
@@ -310,7 +427,16 @@ export interface GameState {
   treeHealth: TreeHealth;
   riskMeter: number;
   riskLevel: RiskLevel;
+  currentPhase: number;
+  completedScenarios: number;
+  phaseUnlockModal: PhaseUnlockModal | null;
+  emergencyLoan: EmergencyLoan | null;
+  loanTakenToday: number;
+  loanRepaidToday: number;
+  loanInterestPaidToday: number;
+  weatherLossToday: number;
   pendingEvents: PendingEvent[];
+  currentSimpleEvent: SimpleEvent | null;
   activeDailyEvents: Event[];
   activeGameEvent: Event | null;
   eventConsequences: Array<{
@@ -346,6 +472,9 @@ export interface GameState {
   showMaintenancePopup: boolean;
   isGameOver: boolean;
   gameOverReason: string | null;
+  stockItems: StockItem[];
+  stockUnlocked: boolean;
+  stormPenaltyDaysRemaining: number;
 
   // Storm chance modifier (from high-risk assets)
   stormChanceModifier: number;
@@ -374,6 +503,8 @@ export interface GameActions {
   // Banking actions
   depositToSavings: (amount: number) => void;
   withdrawFromSavings: (amount: number) => void;
+  takeEmergencyLoan: (amount: number) => boolean;
+  repayEmergencyLoan: () => boolean;
   createFixedDeposit: (amount: number, durationDays: number) => void;
   withdrawFixedDeposit: (fdId: string) => void;
 
@@ -398,6 +529,10 @@ export interface GameActions {
   buildDailySummary: () => DailySummary;
   setGeminiReview: (review: GeminiReview) => void;
   setReviewStatus: (status: ReviewStatus, error?: string | null) => void;
+  setAiReviewEnabled: (enabled: boolean) => void;
+  awardNightExp: (extraExp: number, day: number) => void;
+  isFeatureUnlocked: (feature: UnlockFeature) => boolean;
+  dismissPhaseUnlockModal: () => void;
   addReviewChatMessage: (message: GeminiChatMessage) => void;
   clearReviewChatMessages: () => void;
   setHasPlayed: (value: boolean) => void;

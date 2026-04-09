@@ -1,27 +1,30 @@
-// Game configuration constants
-
-import type { Event } from "@/types/game";
+import type {
+  AssetDescription,
+  Event,
+  MarketAsset,
+  SimpleEvent,
+  StockItem,
+} from "@/types/game";
 
 export const GAME_CONFIG = {
-  // Starting values
   INITIAL_MONEY: 100,
   INITIAL_WATER: 5,
 
-  // Water mechanics - updated pricing
-  WATER_COST_SINGLE: 100, // Cost for 1 water drop
-  WATER_COST_5: 450, // Cost for 5 water drops (10% discount)
-  WATER_COST_10: 850, // Standard cost for 10 water drops
+  EMERGENCY_LOAN_OPTIONS: [500, 1000, 2000],
+  EMERGENCY_LOAN_DAILY_INTEREST_RATE: 0.02,
+  EMERGENCY_LOAN_DANGER_WALLET: 40,
 
-  // Tree mechanics
-  BASE_TREE_YIELD: 120, // ₹120 per watering (per drop)
-  MAX_WATERING_PER_DAY: 3, // Maximum times tree can be watered per day
-  TREE_HEALTH_DECAY: 5, // Health lost if not watered
-  TREE_HEALTH_GAIN: 10, // Health gained per watering
+  WATER_COST_SINGLE: 100,
+  WATER_COST_5: 450,
+  WATER_COST_10: 850,
 
-  // Banking - Savings Account
-  SAVINGS_INTEREST_RATE: 0.01, // 1% daily interest
+  BASE_TREE_YIELD: 120,
+  MAX_WATERING_PER_DAY: 3,
+  TREE_HEALTH_DECAY: 5,
+  TREE_HEALTH_GAIN: 10,
+  WATERING_SESSIONS_PER_DAY: 3,
 
-  // Banking - Fixed Deposit options
+  SAVINGS_INTEREST_RATE: 0.01,
   FD_MINIMUM_AMOUNT: 100,
   FD_OPTIONS: [
     { days: 3, rate: 0.05, label: "3 Days - 5%" },
@@ -29,373 +32,299 @@ export const GAME_CONFIG = {
     { days: 15, rate: 0.12, label: "15 Days - 12%" },
     { days: 30, rate: 0.20, label: "30 Days - 20%" },
   ],
-  FD_EARLY_WITHDRAWAL_PENALTY: 0.15, // 15% penalty for early withdrawal
+  FD_EARLY_WITHDRAWAL_PENALTY: 0.15,
 
-  // Banking - SIP (Systematic Investment Plan)
   SIP_MIN_AMOUNT: 50,
   SIP_INTERVALS: [
-    { days: 30, label: "1 Month (30 days)" },
-    { days: 60, label: "2 Months (60 days)" },
+    { days: 1, label: "Daily" },
+    { days: 3, label: "Every 3 Days" },
+    { days: 7, label: "Weekly" },
   ],
-  SIP_GROWTH_RATE: 0.02, // 2% growth per interval
+  SIP_GROWTH_RATE: 0.02,
 
-  // Days
-  WATERING_SESSIONS_PER_DAY: 3, // After this many waterings, day can end
+  WEATHER_RAIN_BONUS: 0,
+  WEATHER_DROUGHT_PENALTY: 0.6,
+  WEATHER_STORM_PENALTY: 0,
+  WEATHER_STORM_EMERGENCY_LOSS: 80,
+  WEATHER_STORM_TREE_HEALTH_LOSS: 15,
+  WEATHER_STORM_TREE_HEALTH_DAYS: 2,
+  BASE_STORM_CHANCE: 0,
+  MAX_EVENTS_PER_DAY: 1,
+  TEMPTATION_SAVINGS_THRESHOLD: 120,
 
-  // Weather Events
-  WEATHER_RAIN_BONUS: 0.01, // 1% earnings bonus during rain
-  WEATHER_DROUGHT_PENALTY: 0.25, // 25% earnings penalty during drought
-  WEATHER_STORM_PENALTY: 0.3, // 30% earnings penalty during storm
-  WEATHER_EVENT_DURATION: 1, // Weather events last for the current day
-  WEATHER_RAIN_CLEAR_COST: 50,
-  WEATHER_DROUGHT_CLEAR_COST: 100,
-  WEATHER_STORM_CLEAR_COST: 150,
-  WEATHER_DAILY_WATER_BONUS: 10,
-  BASE_STORM_CHANCE: 0.05, // 5% base chance of storm each day
+  DEPRECIATING_EFFECT_DECAY_INTERVAL_DAYS: 2,
+  DEPRECIATING_EFFECT_DECAY_PERCENT: 4,
+  DEPRECIATING_EFFECT_MIN_MULTIPLIER: 0.7,
+  DEPRECIATING_MAINTENANCE_INTERVAL_DAYS: 2,
 
-  // Asset maintenance intervals
-  CAR_MAINTENANCE_INTERVAL: 15, // Every 15 days
-  CAR_MAINTENANCE_BASE_COST: 2, // Starting maintenance cost (doubles each time)
-  GADGET_MAINTENANCE_COST: 400, // One-time repair after storm
-  MAX_EVENTS_PER_DAY: 3,
-  TEMPTATION_SAVINGS_THRESHOLD: 300,
-  MORNING_PHASE_DURATION_MS: 30000,
-  LEVEL_EXP_PER_LEVEL: 200,
-  INFLATION_RATE_MIN: 0.003,
-  INFLATION_RATE_MAX: 0.008,
+  DAILY_CASH_INFLATION_RATE: 0.005,
+  INFLATION_RATE_MIN: 0.005,
+  INFLATION_RATE_MAX: 0.005,
+  MORNING_PHASE_DURATION_MS: 12000,
+
+  REVIEW_BASE_EXP: 25,
+  REVIEW_MAX_EXTRA_EXP: 75,
+  LEVEL_EXP_PER_LEVEL: 250,
+  STOCK_UNLOCK_LEVEL: 8,
+
   DAILY_SUMMARY_STORAGE_KEY: "growtopia-daily-summaries",
 } as const;
 
-export const EVENT_TEMPLATES: Event[] = [
+export const ASSET_DESCRIPTIONS: Record<string, AssetDescription> = {
+  bike: {
+    id: "bike",
+    type: "depreciating",
+    description:
+      "Gives quick boost to daily earnings for 2-3 days but will need costly repairs later.",
+  },
+  scooter: {
+    id: "scooter",
+    type: "depreciating",
+    description:
+      "Gives quick boost to daily earnings for 2-3 days but will need costly repairs later.",
+  },
+  car: {
+    id: "car",
+    type: "depreciating",
+    description:
+      "Gives quick boost to daily earnings for 2-3 days but will need costly repairs later.",
+  },
+  "village-shop": {
+    id: "village-shop",
+    type: "appreciating",
+    description:
+      "Increases tree earnings permanently by 12-18% every day after purchase.",
+  },
+  "green-energy": {
+    id: "green-energy",
+    type: "appreciating",
+    description:
+      "Increases tree earnings permanently by 12-18% every day after purchase.",
+  },
+};
+
+export const SIMPLE_EVENTS: SimpleEvent[] = [
   {
-    id: "asset-discount",
-    title: "Asset Discount!",
-    icon: "🏷️",
-    type: "temptation",
-    probability: 0.14,
-    minDay: 2,
+    id: "bike-offer",
+    title: "Bike Offer",
+    icon: "🚲",
+    advantage: "+25% earning for next 3 days.",
+    disadvantage: "On Day+4, ₹120 maintenance cost.",
     choices: [
-      {
-        id: "buy-discount",
-        label: "Buy now at 30% off",
-        icon: "🔥",
-        consequence: {
-          walletDelta: -280,
-          investmentDelta: 80,
-          riskDelta: 10,
-          scheduleEventId: "asset-maintenance-shock",
-          scheduleAfterDays: 2,
-        },
-      },
-      {
-        id: "wait-plan",
-        label: "Skip and keep buffer",
-        icon: "🧠",
-        consequence: { treeHealthDelta: 4, riskDelta: -4 },
-      },
+      { id: "accept", label: "Accept Bike Offer", icon: "✅" },
+      { id: "skip", label: "Skip for Safety", icon: "🛡️" },
     ],
   },
   {
-    id: "asset-maintenance-shock",
-    title: "Maintenance Shock",
-    icon: "🧾",
-    type: "loss",
-    probability: 0,
+    id: "scooter-offer",
+    title: "Scooter Offer",
+    icon: "🛵",
+    advantage: "+18% earning for next 2 days.",
+    disadvantage: "On Day+3, ₹90 repair cost.",
     choices: [
-      {
-        id: "pay-fee",
-        label: "Pay maintenance fee",
-        icon: "💸",
-        consequence: { walletDelta: -210, treeHealthDelta: -10, riskDelta: 8 },
-      },
+      { id: "accept", label: "Take Scooter Deal", icon: "🔥" },
+      { id: "skip", label: "Avoid Repair Risk", icon: "🧠" },
+    ],
+  },
+  {
+    id: "festival-gift-offer",
+    title: "Festival Gift Offer",
+    icon: "🎁",
+    advantage: "Spend ₹120 now and get ₹60 extra next day.",
+    disadvantage: "If savings buffer is low tomorrow, tree health -10.",
+    choices: [
+      { id: "accept", label: "Buy Gift Pack", icon: "🎉", cost: 120 },
+      { id: "skip", label: "Skip and Save", icon: "💰" },
+    ],
+  },
+  {
+    id: "delay-bill-offer",
+    title: "Delay Bill Offer",
+    icon: "📄",
+    advantage: "Get instant ₹100 cash today.",
+    disadvantage: "Day+5 bill becomes ₹130.",
+    choices: [
+      { id: "accept", label: "Delay the Bill", icon: "⏳" },
+      { id: "skip", label: "Pay on Time", icon: "✅" },
+    ],
+  },
+  {
+    id: "emergency-friend-help",
+    title: "Emergency Friend Help",
+    icon: "🤝",
+    advantage: "Lend ₹80 today and friend may return ₹110 in 4 days.",
+    disadvantage: "40% chance friend returns only ₹40.",
+    choices: [
+      { id: "accept", label: "Help Friend", icon: "💛", cost: 80 },
+      { id: "skip", label: "Keep Emergency Cash", icon: "🧯" },
     ],
   },
   {
     id: "quick-fd-bonus",
-    title: "Quick FD Bonus",
+    title: "Quick FD Bonus Event",
     icon: "🔒",
-    type: "temptation",
-    probability: 0.11,
-    minDay: 2,
+    advantage: "Lock ₹150 for 7 days: 8% FD + extra 3% bonus.",
+    disadvantage: "Money is locked and cannot be used early without penalty.",
     choices: [
-      {
-        id: "lock-cash",
-        label: "Lock money for bonus",
-        icon: "⚡",
-        consequence: {
-          walletDelta: -180,
-          investmentDelta: 240,
-          treeHealthDelta: 7,
-          scheduleEventId: "liquidity-crunch",
-          scheduleAfterDays: 3,
-        },
-      },
-      {
-        id: "keep-liquid",
-        label: "Keep funds flexible",
-        icon: "🪙",
-        consequence: { riskDelta: -2, treeHealthDelta: 2 },
-      },
+      { id: "accept", label: "Create Bonus FD", icon: "📈", cost: 150 },
+      { id: "skip", label: "Keep Wallet Liquid", icon: "🪙" },
     ],
   },
   {
-    id: "liquidity-crunch",
-    title: "Liquidity Crunch",
-    icon: "🥶",
-    type: "loss",
-    probability: 0,
+    id: "appreciating-asset-discount",
+    title: "Appreciating Asset Discount",
+    icon: "🏪",
+    advantage: "Buy Village Shop for ₹200 instead of ₹280 (+15% permanent earning).",
+    disadvantage: "None. Great deal if you can afford it.",
     choices: [
-      {
-        id: "cover-gap",
-        label: "Cover urgent expense",
-        icon: "🚨",
-        consequence: { walletDelta: -170, savingsDelta: -50, treeHealthDelta: -8, riskDelta: 8 },
-      },
+      { id: "accept", label: "Buy Village Shop", icon: "✅", cost: 200 },
+      { id: "skip", label: "Skip for Now", icon: "⏭️" },
     ],
   },
   {
-    id: "delay-payment-offer",
-    title: "Delay Payment Offer",
-    icon: "🗓️",
-    type: "temptation",
-    probability: 0.13,
-    minDay: 2,
+    id: "car-offer",
+    title: "Car Offer",
+    icon: "🚗",
+    advantage: "+35% earning for next 3 days.",
+    disadvantage: "On Day+4, pay ₹250 heavy maintenance.",
     choices: [
-      {
-        id: "delay-bill",
-        label: "Delay bill and keep cash now",
-        icon: "😮",
-        consequence: {
-          walletDelta: 90,
-          riskDelta: 16,
-          scheduleEventId: "delayed-bill-penalty",
-          scheduleAfterDays: 2,
-        },
-      },
-      {
-        id: "pay-now",
-        label: "Pay now and stay safe",
-        icon: "✅",
-        consequence: { walletDelta: -90, riskDelta: -3, treeHealthDelta: 2 },
-      },
-    ],
-  },
-  {
-    id: "delayed-bill-penalty",
-    title: "Delayed Bill Penalty",
-    icon: "📬",
-    type: "loss",
-    probability: 0,
-    choices: [
-      {
-        id: "pay-with-penalty",
-        label: "Pay delayed bill (+15%)",
-        icon: "💸",
-        consequence: { walletDelta: -104, treeHealthDelta: -6, riskDelta: 8 },
-      },
-    ],
-  },
-  {
-    id: "risky-trade",
-    title: "Risky Trade",
-    icon: "📉",
-    type: "temptation",
-    probability: 0.1,
-    minDay: 3,
-    choices: [
-      {
-        id: "go-all-in",
-        label: "Take high-risk trade",
-        icon: "🎲",
-        consequence: {
-          walletDelta: -140,
-          investmentDelta: 210,
-          riskDelta: 18,
-          scheduleEventId: "risky-trade-crash",
-          scheduleAfterDays: 1,
-        },
-      },
-      {
-        id: "pass",
-        label: "Skip risky trade",
-        icon: "🛡️",
-        consequence: { treeHealthDelta: 3, riskDelta: -4 },
-      },
-    ],
-  },
-  {
-    id: "risky-trade-crash",
-    title: "Trade Crash",
-    icon: "💥",
-    type: "loss",
-    probability: 0,
-    choices: [
-      {
-        id: "absorb-loss",
-        label: "Absorb crash loss",
-        icon: "📉",
-        consequence: { walletDelta: -220, treeHealthDelta: -12, riskDelta: 12 },
-      },
-    ],
-  },
-  {
-    id: "course-bundle",
-    title: "Skill Course Bundle",
-    icon: "🎓",
-    type: "temptation",
-    probability: 0.09,
-    minDay: 2,
-    choices: [
-      {
-        id: "buy-bundle",
-        label: "Buy all courses now",
-        icon: "📚",
-        consequence: {
-          walletDelta: -160,
-          treeHealthDelta: 5,
-          riskDelta: 6,
-          scheduleEventId: "subscription-renewal",
-          scheduleAfterDays: 3,
-        },
-      },
-      {
-        id: "buy-one",
-        label: "Pick one affordable course",
-        icon: "✅",
-        consequence: { walletDelta: -60, treeHealthDelta: 3, riskDelta: -1 },
-      },
-    ],
-  },
-  {
-    id: "subscription-renewal",
-    title: "Auto-Renewal Charge",
-    icon: "🔁",
-    type: "loss",
-    probability: 0,
-    choices: [
-      {
-        id: "pay-renewal",
-        label: "Pay renewal fee",
-        icon: "💳",
-        consequence: { walletDelta: -130, riskDelta: 6, treeHealthDelta: -4 },
-      },
-    ],
-  },
-  {
-    id: "safe-sip-nudge",
-    title: "Steady SIP Boost",
-    icon: "📊",
-    type: "invest",
-    probability: 0.08,
-    minDay: 2,
-    choices: [
-      {
-        id: "start-steady",
-        label: "Start a steady SIP",
-        icon: "🌱",
-        consequence: { walletDelta: -80, investmentDelta: 95, treeHealthDelta: 4, riskDelta: -2 },
-      },
-      {
-        id: "later",
-        label: "Later",
-        icon: "⏳",
-        consequence: { riskDelta: 2 },
-      },
-    ],
-  },
-  {
-    id: "emergency-grant",
-    title: "Emergency Grant",
-    icon: "🎁",
-    type: "reward",
-    probability: 0.06,
-    choices: [
-      {
-        id: "take-grant",
-        label: "Take support grant",
-        icon: "🧯",
-        consequence: { walletDelta: 90, rewardWater: 2, riskDelta: -6, treeHealthDelta: 3 },
-      },
+      { id: "accept", label: "Take Car Deal", icon: "⚡" },
+      { id: "skip", label: "Avoid Heavy Cost", icon: "🧠" },
     ],
   },
 ];
 
-export const MARKET_ASSETS = [
-  // Depreciating Assets
+// Kept for compatibility with older modules.
+export const EVENT_TEMPLATES: Event[] = [];
+
+export const MARKET_ASSETS: MarketAsset[] = [
   {
-    id: "creator-kit",
-    name: "🎥 Creator Kit",
-    type: "depreciating" as const,
-    description: "High earnings for 2 days, then repairs and maintenance rise quickly.",
-    basePrice: 1000,
-    currentPrice: 1000,
-    boostMultiplier: 4.0, // 300% more = 4x income
-    boostDuration: 2, // For 2 days only
-    depreciationRate: 0.15, // Loses 15% value daily after boost
-    maintenanceCost: 120, // Base daily maintenance after boost
-    stormChanceBoost: 0.35, // +35% storm chance after 3-4 days until storm
-    stormTriggerDay: 3, // Days after purchase when storm chance increases
+    id: "bike",
+    name: "🚲 Bike",
+    type: "depreciating",
+    description: ASSET_DESCRIPTIONS.bike.description,
+    basePrice: 160,
+    currentPrice: 160,
+    boostMultiplier: 1.25,
+    boostDuration: 3,
+    depreciationRate: 0.1,
+    maintenanceCost: 24,
+    maintenanceInterval: 2,
+  },
+  {
+    id: "scooter",
+    name: "🛵 Scooter",
+    type: "depreciating",
+    description: ASSET_DESCRIPTIONS.scooter.description,
+    basePrice: 210,
+    currentPrice: 210,
+    boostMultiplier: 1.18,
+    boostDuration: 2,
+    depreciationRate: 0.11,
+    maintenanceCost: 32,
+    maintenanceInterval: 2,
   },
   {
     id: "car",
     name: "🚗 Car",
-    type: "depreciating" as const,
-    description: "Water costs less, but maintenance starts after day 15 and rises fast.",
-    basePrice: 2000,
-    currentPrice: 2000,
-    waterCostReduction: 12, // Reduces water cost by ₹12 each
-    boostMultiplier: 1.0, // No direct income boost
-    boostDuration: 15, // Grace period before daily maintenance starts
-    depreciationRate: 0.05, // Loses 5% value daily
-    maintenanceInterval: 15, // Every 15 days
-    maintenanceBaseCost: 60, // Base maintenance before exponential increase
+    type: "depreciating",
+    description: ASSET_DESCRIPTIONS.car.description,
+    basePrice: 480,
+    currentPrice: 480,
+    boostMultiplier: 1.35,
+    boostDuration: 3,
+    depreciationRate: 0.12,
+    maintenanceCost: 50,
+    maintenanceInterval: 2,
   },
   {
-    id: "bicycle",
-    name: "🚲 Bicycle",
-    type: "depreciating" as const,
-    description: "A starter vehicle! Small boost, low maintenance.",
-    basePrice: 300,
-    currentPrice: 300,
-    boostMultiplier: 1.3, // 30% more income
-    boostDuration: 7, // For 7 days
-    depreciationRate: 0.08, // Loses 8% value daily after boost
-    maintenanceCost: 20, // Costs ₹20 per day after boost
+    id: "village-shop",
+    name: "🏪 Village Shop",
+    type: "appreciating",
+    description: ASSET_DESCRIPTIONS["village-shop"].description,
+    basePrice: 280,
+    currentPrice: 280,
+    appreciationRate: 0.15,
+    appreciationInterval: 1,
+    peakDay: 365,
   },
+  {
+    id: "green-energy",
+    name: "🔋 Green Energy",
+    type: "appreciating",
+    description: ASSET_DESCRIPTIONS["green-energy"].description,
+    basePrice: 320,
+    currentPrice: 320,
+    appreciationRate: 0.12,
+    appreciationInterval: 1,
+    peakDay: 365,
+  },
+];
 
-  // Appreciating Assets
+export const STOCK_ITEMS: StockItem[] = [
   {
-    id: "gold",
-    name: "🪙 Gold",
-    type: "appreciating" as const,
-    description: "No immediate benefit. Value grows 10% every 15 days! Long-term wealth.",
-    basePrice: 500,
-    currentPrice: 500,
-    appreciationRate: 0.10, // 10% growth
-    appreciationInterval: 15, // Every 15 days
-    peakDay: 90, // Peaks at day 90 from purchase
+    id: "agri-tech",
+    symbol: "AGT",
+    name: "AgriTech Co.",
+    points: [
+      { day: "D1", price: 92 },
+      { day: "D2", price: 95 },
+      { day: "D3", price: 93 },
+      { day: "D4", price: 97 },
+      { day: "D5", price: 101 },
+    ],
+    dailyNews: [
+      "Crop sensor demand rose in rural markets.",
+      "AgriTech signed a new school farm program.",
+    ],
   },
   {
-    id: "silver",
-    name: "🥈 Silver",
-    type: "appreciating" as const,
-    description: "Affordable precious metal. Value grows 8% every 15 days.",
-    basePrice: 200,
-    currentPrice: 200,
-    appreciationRate: 0.08, // 8% growth every interval
-    appreciationInterval: 15, // Every 15 days
-    peakDay: 75, // Peaks at day 75 from purchase
+    id: "solar-grid",
+    symbol: "SOL",
+    name: "Solar Grid",
+    points: [
+      { day: "D1", price: 120 },
+      { day: "D2", price: 118 },
+      { day: "D3", price: 121 },
+      { day: "D4", price: 125 },
+      { day: "D5", price: 124 },
+    ],
+    dailyNews: [
+      "New rooftop policy improved clean-energy demand.",
+      "Solar Grid opened two micro-grid projects.",
+    ],
   },
   {
-    id: "land_plot",
-    name: "🏞️ Land",
-    type: "appreciating" as const,
-    description: "Real estate! Grows 15% every 15 days. The best long-term investment.",
-    basePrice: 1500,
-    currentPrice: 1500,
-    appreciationRate: 0.15, // 15% growth every interval
-    appreciationInterval: 15, // Every 15 days
-    peakDay: 120, // Peaks at day 120 from purchase
+    id: "fresh-mart",
+    symbol: "FSM",
+    name: "FreshMart",
+    points: [
+      { day: "D1", price: 76 },
+      { day: "D2", price: 79 },
+      { day: "D3", price: 77 },
+      { day: "D4", price: 82 },
+      { day: "D5", price: 84 },
+    ],
+    dailyNews: [
+      "Festival sales increased FreshMart margins.",
+      "Cold-chain expansion announced in two towns.",
+    ],
+  },
+  {
+    id: "water-systems",
+    symbol: "WTR",
+    name: "Water Systems",
+    points: [
+      { day: "D1", price: 64 },
+      { day: "D2", price: 66 },
+      { day: "D3", price: 69 },
+      { day: "D4", price: 68 },
+      { day: "D5", price: 72 },
+    ],
+    dailyNews: [
+      "Water recycling contracts signed with local councils.",
+      "Pump efficiency upgrade reduced production costs.",
+    ],
   },
 ];
 

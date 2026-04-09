@@ -1,6 +1,7 @@
 // Asset value calculations for appreciating and depreciating assets
 
 import type { Asset, MarketAsset } from "@/types/game";
+import { GAME_CONFIG } from "@/lib/constants";
 
 export interface MaintenanceBreakdown {
   assetId: string;
@@ -52,19 +53,34 @@ export function calculateDepreciatingAssetValue(
 ): number {
   if (asset.type !== "depreciating") return asset.currentValue;
 
-  const daysSincePurchase = currentDay - asset.purchaseDay;
-  const boostDuration = asset.boostDuration || 5;
+  const daysSincePurchase = Math.max(0, currentDay - asset.purchaseDay);
   const depreciationRate = asset.depreciationRate || 0.1;
+  const depreciationInterval =
+    asset.maintenanceInterval || GAME_CONFIG.DEPRECIATING_EFFECT_DECAY_INTERVAL_DAYS;
+  const depreciationSteps = Math.floor(daysSincePurchase / Math.max(1, depreciationInterval));
+  const depreciation = Math.pow(1 - depreciationRate, depreciationSteps);
+  const floorValue = Math.max(10, Math.floor(asset.purchasePrice * 0.2));
 
-  if (daysSincePurchase <= boostDuration) {
-    // During boost period, asset maintains value
-    return asset.purchasePrice;
-  } else {
-    // After boost, asset depreciates
-    const daysAfterBoost = daysSincePurchase - boostDuration;
-    const depreciation = Math.pow(1 - depreciationRate, daysAfterBoost);
-    return Math.floor(Math.max(10, asset.purchasePrice * depreciation));
-  }
+  return Math.floor(Math.max(floorValue, asset.purchasePrice * depreciation));
+}
+
+/**
+ * Depreciating asset effects decay in fixed cycles and can turn negative.
+ */
+export function getDepreciatingYieldMultiplier(asset: Asset, currentDay: number): number {
+  if (asset.type !== "depreciating") return 1;
+
+  const baseMultiplier = asset.boostMultiplier || 1;
+  const daysSincePurchase = Math.max(0, currentDay - asset.purchaseDay);
+  const decayInterval =
+    asset.maintenanceInterval || GAME_CONFIG.DEPRECIATING_EFFECT_DECAY_INTERVAL_DAYS;
+  const decaySteps = Math.floor(daysSincePurchase / Math.max(1, decayInterval));
+  const baseBoostPercent = (baseMultiplier - 1) * 100;
+  const decayedPercent =
+    baseBoostPercent - decaySteps * GAME_CONFIG.DEPRECIATING_EFFECT_DECAY_PERCENT;
+  const multiplier = 1 + decayedPercent / 100;
+
+  return Math.max(GAME_CONFIG.DEPRECIATING_EFFECT_MIN_MULTIPLIER, multiplier);
 }
 
 /**
@@ -85,12 +101,15 @@ export function updateAssetValues(
   currentDay: number,
 ): Asset[] {
   return assets.map((asset) => {
+    const effectiveMultiplier =
+      asset.type === "depreciating" ? getDepreciatingYieldMultiplier(asset, currentDay) : 1;
+
     const updatedAsset = {
       ...asset,
       currentValue: calculateAssetValue(asset, currentDay),
       boostExpired:
         asset.type === "depreciating"
-          ? currentDay - asset.purchaseDay >= (asset.boostDuration || 0)
+          ? effectiveMultiplier <= 1
           : undefined,
     };
 
@@ -135,11 +154,12 @@ export function calculateDailyMaintenanceBreakdown(
   for (const asset of assets) {
     if (asset.type !== "depreciating") continue;
 
-    const daysOwned = currentDay - asset.purchaseDay;
-    const graceDays = asset.boostDuration || 0;
-    if (daysOwned <= graceDays) continue;
+    const daysOwned = Math.max(0, currentDay - asset.purchaseDay);
+    const maintenanceInterval =
+      asset.maintenanceInterval || GAME_CONFIG.DEPRECIATING_MAINTENANCE_INTERVAL_DAYS;
+    if (daysOwned === 0 || daysOwned % Math.max(1, maintenanceInterval) !== 0) continue;
 
-    const daysPastGrace = daysOwned - graceDays;
+    const cycleCount = Math.floor(daysOwned / Math.max(1, maintenanceInterval));
     const baseCost = asset.maintenanceCost || asset.maintenanceBaseCost || 25;
 
     const growthFactor =
@@ -149,18 +169,18 @@ export function calculateDailyMaintenanceBreakdown(
           ? 1.28
           : 1.18;
 
-    const cost = Math.floor(baseCost * Math.pow(growthFactor, daysPastGrace - 1));
+    const cost = Math.floor(baseCost * Math.pow(growthFactor, Math.max(0, cycleCount - 1)));
     if (cost <= 0) continue;
 
     breakdown.push({
       assetId: asset.id,
       assetName: asset.name,
       cost,
-      daysPastGrace,
+      daysPastGrace: cycleCount,
       note:
-        daysPastGrace <= 3
-          ? "Maintenance has started"
-          : "Maintenance is growing exponentially",
+        cycleCount <= 2
+          ? `Recurring maintenance (every ${maintenanceInterval} days)`
+          : `Recurring maintenance is getting expensive (cycle ${cycleCount})`,
     });
   }
 

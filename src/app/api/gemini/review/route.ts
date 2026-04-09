@@ -17,7 +17,7 @@ type GeminiReviewRequest = {
 function clampExp(value: unknown): number {
   const parsed = typeof value === "number" ? value : Number(value);
   if (Number.isNaN(parsed)) return 0;
-  return Math.max(0, Math.min(100, Math.floor(parsed)));
+  return Math.max(0, Math.min(75, Math.floor(parsed)));
 }
 
 function extractGeminiText(payload: unknown): string {
@@ -45,38 +45,86 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
   }
 }
 
+function buildSystemPrompt(): string {
+  return [
+    "You are the AI financial coach for Growtopia, a visual event-driven money game for students age 14-15.",
+    "Game rules (always respect these):",
+    "1) Tree = money machine. Watering = earning.",
+    "2) Savings account gives 1% daily.",
+    "3) FD options: 3/7/15/30 days with 5%/8%/12%/20%.",
+    "4) SIP grows 2% per interval.",
+    "5) Inflation is 0.5% daily on cash only.",
+    "6) Weather effects: Rain no change, Storm wallet -80 and tree health stress, Drought cuts earnings by 60%.",
+    "7) Depreciating assets boost short-term income but can cause later repair losses.",
+    "8) Appreciating assets improve long-term earnings.",
+    "9) Emergency loans are one-at-a-time and interest grows daily until full repayment.",
+    "10) Explain active buffs/debuffs clearly with source items and money impact.",
+    "11) Use the phase progression lens: advise only currently unlocked strategy depth.",
+    "12) Explain risk vs reward clearly using very simple language.",
+    "13) Keep feedback short, practical, and encouraging.",
+  ].join("\n");
+}
+
+function buildFinancialContext(summary: DailySummary): string {
+  const effects = (summary.activeEffects || [])
+    .map((effect) => `${effect.source}: ${effect.impactText}`)
+    .join(" | ");
+
+  return JSON.stringify(
+    {
+      day: summary.currentDay,
+      phase: summary.currentPhase,
+      netWorth: summary.netWorth,
+      weather: summary.weather,
+      riskLevel: summary.riskLevel,
+      wallet: summary.walletBalance,
+      savings: summary.savingsBalance,
+      loanSnapshot: summary.loanSnapshot,
+      financialBreakdown: summary.financialBreakdown,
+      activeEffects: effects,
+      maintenancePaid: summary.maintenancePaid,
+      spentToday: summary.spentToday,
+      investedToday: summary.investedToday,
+      savedToday: summary.savedToday,
+      decisions: summary.decisions.map((item) => ({
+        event: item.eventTitle,
+        choice: item.choiceLabel,
+        walletDelta: item.walletDelta,
+        consequenceSummary: item.consequenceSummary,
+      })),
+    },
+    null,
+    2,
+  );
+}
+
 function createReviewPrompt(summary: DailySummary): string {
   return [
-    "You are the AI coach for Growtopia, an event-driven financial literacy game for teenagers (14-15).",
+    buildSystemPrompt(),
     "Return ONLY valid JSON with this exact shape:",
-    '{"summary":"string", "exp": number, "suggestedQuestions": ["string", "string", "string"]}',
-    "Rules:",
-    "1) Keep summary short, friendly, visual, and emoji-rich.",
-    "2) Mention inflation and whether player choices were protected by FD/SIP/assets.",
-    "3) Mention risk vs reward from decisions and pending consequences.",
-    "4) EXP must be 0 to 100, based on smart financial behavior.",
-    "5) suggestedQuestions should be 2-3 tappable short prompts.",
-    "6) If mistakes happened, be encouraging but honest.",
-    "Game context:",
-    "- Players earn by watering a prosperity tree.",
-    "- Daily flow: Morning -> Events -> Evening Banking -> Night Review.",
-    "- Temptations can schedule future losses.",
-    "- Inflation reduces purchasing power of cash.",
-    "- FD/SIP/assets can protect long-term growth.",
-    "Daily summary JSON:",
-    JSON.stringify(summary),
+    '{"goodThings":["...","..."],"improvements":["...","..."],"exp":number,"suggestedQuestions":["...","..."]}',
+    "Formatting requirements:",
+    "- goodThings: 2-3 short bullet-ready points",
+    "- improvements: 2-3 short bullet-ready points with direct advice",
+    "- exp: number only, 0 to 75",
+    "- suggestedQuestions: 2-3 short student-friendly follow-up questions",
+    "- explicitly mention losses/profits/spendings and whether emergency loan is active",
+    "- mention at least one active buff or debuff source if present",
+    "Player day context JSON:",
+    buildFinancialContext(summary),
   ].join("\n");
 }
 
 function createChatPrompt(summary: DailySummary, question: string, history: ChatTurn[]): string {
   return [
+    buildSystemPrompt(),
     "You are Growtopia AI Coach.",
     "Give concise, kid-friendly financial advice for age 14-15 using icons/emojis.",
     "Answer in plain text only (no JSON).",
     "Reference today summary and user question.",
     "If user asks for risky action, explain consequence clearly.",
     "Summary:",
-    JSON.stringify(summary),
+    buildFinancialContext(summary),
     "Conversation so far:",
     JSON.stringify(history),
     `Player question: ${question}`,
@@ -142,12 +190,35 @@ export async function POST(request: Request) {
     const rawText = extractGeminiText(payload);
     const parsed = extractJsonObject(rawText) || {};
 
+    const goodThings = Array.isArray(parsed.goodThings)
+      ? parsed.goodThings
+          .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+          .slice(0, 3)
+      : [];
+
+    const improvements = Array.isArray(parsed.improvements)
+      ? parsed.improvements
+          .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+          .slice(0, 3)
+      : [];
+
     const review = {
       day: body.summary.currentDay,
-      summary:
-        typeof parsed.summary === "string" && parsed.summary.trim().length > 0
-          ? parsed.summary
-          : "🌙 Solid effort today. Watch inflation, protect cash with saving/investing, and avoid rushed temptations.",
+      summary: "Review generated",
+      goodThings:
+        goodThings.length > 0
+          ? goodThings
+          : [
+              "You finished the day and reviewed your choices.",
+              "You tracked weather and event impacts instead of guessing.",
+            ],
+      improvements:
+        improvements.length > 0
+          ? improvements
+          : [
+              "Keep a bigger emergency buffer before accepting risky offers.",
+              "Use FD/SIP more consistently to fight inflation on idle cash.",
+            ],
       exp: clampExp(parsed.exp),
       suggestedQuestions: Array.isArray(parsed.suggestedQuestions)
         ? parsed.suggestedQuestions
@@ -156,7 +227,7 @@ export async function POST(request: Request) {
         : [
             "How can I beat inflation tomorrow?",
             "Should I prioritize FD or SIP next?",
-            "Which temptation hurt me most today?",
+            "What should I avoid if I see a delay-bill offer again?",
           ],
       model: DEFAULT_MODEL,
     };

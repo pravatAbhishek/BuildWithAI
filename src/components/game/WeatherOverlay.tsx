@@ -17,12 +17,13 @@ export const WeatherOverlay = ({ suppressUi = false }: WeatherOverlayProps) => {
     currentWeather,
     weatherIntensity,
     player,
-    payWeatherCharge,
     activeStormEmergency,
   } = useGameStore();
   const [dismissedTips, setDismissedTips] = useState<Record<string, boolean>>({});
 
-  const showTip = !suppressUi && currentWeather !== "none" && !dismissedTips[currentWeather];
+  const tipKey = `${player.currentDay}-${currentWeather}`;
+
+  const showTip = !suppressUi && currentWeather !== "none" && !dismissedTips[tipKey];
   const tip = WEATHER_TIPS[currentWeather as keyof typeof WEATHER_TIPS];
   const stormEmergencySummary =
     currentWeather === "storm" && activeStormEmergency
@@ -32,6 +33,15 @@ export const WeatherOverlay = ({ suppressUi = false }: WeatherOverlayProps) => {
             : ""
         }).`
       : null;
+
+  const weatherImpactText =
+    currentWeather === "rain"
+      ? "Loss today: ₹0"
+      : currentWeather === "drought"
+        ? "Loss today: 60% of each watering earning"
+        : currentWeather === "storm"
+          ? `Loss today: ₹${activeStormEmergency?.cost ?? 80} immediate shock`
+          : "";
 
   return (
     <>
@@ -57,7 +67,7 @@ export const WeatherOverlay = ({ suppressUi = false }: WeatherOverlayProps) => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.4 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50"
+            className="fixed top-12 left-1/2 -translate-x-1/2 z-50"
           >
             <div className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-4 rounded-lg shadow-lg max-w-md">
               <h3 className="font-bold text-lg mb-2">{tip.title}</h3>
@@ -71,7 +81,7 @@ export const WeatherOverlay = ({ suppressUi = false }: WeatherOverlayProps) => {
                 onClick={() =>
                   setDismissedTips((prev) => ({
                     ...prev,
-                    [currentWeather]: true,
+                    [tipKey]: true,
                   }))
                 }
                 className="bg-white text-blue-600 px-4 py-2 rounded font-semibold hover:bg-gray-100 transition-colors"
@@ -100,35 +110,28 @@ export const WeatherOverlay = ({ suppressUi = false }: WeatherOverlayProps) => {
                       Active Event
                     </p>
                     <h4 className="text-xl font-bold text-slate-900">
-                      {currentWeather === "rain" && "Rain Event"}
-                      {currentWeather === "drought" && "Drought Event"}
+                      {currentWeather === "rain" && "Rain Day"}
+                      {currentWeather === "drought" && "Drought Day"}
                     </h4>
                   </div>
-                  {currentWeather === "rain" && (
-                    <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
-                      ₹{50}
-                    </div>
-                  )}
                 </div>
 
                 <p className="text-sm text-slate-600 leading-relaxed">
                   {currentWeather === "rain" &&
-                    "Rain boosts your watering income by 1% today because your savings are strong."}
+                    "Rain has no earning change today. Keep steady habits."}
                   {currentWeather === "drought" &&
-                    "Drought is a guaranteed challenge day. Earnings are reduced by 25% and this event cannot be removed using money."}
+                    "Drought is a challenge day. Earnings are reduced by 60%, but all investments remain open."}
                 </p>
+                <p className="text-sm font-bold text-slate-800">{weatherImpactText}</p>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  {currentWeather === "rain" ? (
-                    <button
-                      onClick={payWeatherCharge}
-                      className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
-                    >
-                      Pay ₹50 to clear rain
-                    </button>
-                  ) : (
+                  {currentWeather === "drought" ? (
                     <div className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
                       Drought cannot be cleared with money
+                    </div>
+                  ) : (
+                    <div className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+                      Rain is neutral today
                     </div>
                   )}
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">

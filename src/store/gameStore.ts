@@ -1,118 +1,77 @@
-// Game state management with Zustand
-
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
-  GameState,
-  GameActions,
-  DailyLesson,
-  DailySummary,
+  ActiveEffect,
   DailyDecision,
-  GeminiReview,
+  DailySummary,
+  EmergencyLoan,
+  GameActions,
+  GameScreen,
+  GameState,
   GeminiChatMessage,
+  GeminiReview,
   LeaderboardEntry,
   MarketAsset,
-  GameScreen,
-  WeatherEvent,
-  SuddenEvent,
-  EventResolutionLog,
-  StormEmergency,
-  Event,
   PendingEvent,
+  RiskLevel,
+  SimpleEvent,
+  StormEmergency,
+  UnlockFeature,
+  WeatherEvent,
 } from "@/types/game";
-import { GAME_CONFIG, MARKET_ASSETS } from "@/lib/constants";
+import { GAME_CONFIG, MARKET_ASSETS, SIMPLE_EVENTS, STOCK_ITEMS } from "@/lib/constants";
 import {
-  calculateTreeYield,
+  applyInflationToCash,
   applyWeatherModifier,
+  calculateTreeYield,
+  calculateWaterCost,
   canWaterTree,
-  updateTreeAfterWatering,
-  resetTreeForNewDay,
   createInitialPlayer,
   createInitialTree,
-  calculateWaterCost,
-  applyInflationToCash,
+  resetTreeForNewDay,
+  updateTreeAfterWatering,
 } from "@/lib/gameEngine";
 import {
-  createInitialSavings,
+  applySIPGrowth,
   applySavingsInterest,
-  depositToSavings as depositSavings,
-  withdrawFromSavings as withdrawSavings,
+  cancelSIP as cancelSIPFn,
   createFixedDeposit as createFD,
+  createInitialSavings,
+  createSIP as createNewSIP,
+  depositToSavings as depositSavings,
+  processSIPForDay,
   updateFDMaturityStatus,
   withdrawFD,
-  createSIP as createNewSIP,
-  applySIPGrowth,
-  cancelSIP as cancelSIPFn,
-  processSIPForDay,
+  withdrawFromSavings as withdrawSavings,
 } from "@/lib/bankingLogic";
 import {
-  updateAssetValues,
   calculateAssetValue,
-  purchaseAsset,
   calculateDailyMaintenanceBreakdown,
+  purchaseAsset,
+  updateAssetValues,
 } from "@/lib/assetCalculator";
 import {
-  generateDailyEvents,
-  resolvePendingEvents,
-  getRiskLevel,
-  buildPendingEvent,
-  isTemptationAccepted,
-  pickDailyInflationRate,
-} from "@/lib/eventSystem";
+  getSimpleEventForDay,
+  queueEventConsequences,
+  resolvePendingConsequences,
+} from "@/lib/simpleEventSystem";
+import {
+  buildPhaseUnlockPayload,
+  getNextPhase,
+  isFeatureUnlocked,
+  type PhaseProgressSnapshot,
+} from "@/lib/phaseSystem";
 
-const ENABLE_LEGACY_SUDDEN_EVENTS = false;
 const createId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-// AI Tips based on player actions
 const AI_TIPS = {
-  lowMoney: "💡 Tip: Try saving some money in the bank for tomorrow!",
-  noWater: "💧 Tip: Buy water from the shop to water your plant!",
-  goodSaver: "🌟 Great job saving! Your money will grow with interest!",
-  investor: "📈 Smart! Investments grow over time but need patience.",
-  wateringDone: "🌙 Great work today! End the day to see what happens next.",
-  firstDay: "👋 Welcome! Tap your plant to water it and earn coins!",
-  bankTip: "🏦 Bank savings are safe and earn 1% daily interest.",
-  investTip: "🌱 Investments grow faster but you can't use them right away.",
-  shopTip: "🛒 Assets can boost your earnings! Check the shop.",
-  balanced: "⚖️ Great balance of saving and spending! Keep it up!",
-  sipTip: "📊 SIPs help you invest regularly - small amounts add up!",
-  fdTip: "🔒 FDs lock your money but give great returns when mature.",
+  firstDay: "👋 Welcome! Water your tree, handle one event, bank smartly, and review at night.",
+  lowMoney: "🧯 Keep some emergency cash. Delays and repairs can hurt later.",
+  healthy: "🌱 Strong day. Balance spending with savings and long-term investing.",
 };
-
-const SUDDEN_EVENTS: SuddenEvent[] = [
-  {
-    id: "legacy-budget-choice",
-    title: "📦 Budget Choice",
-    scenario: "A non-essential purchase appears. Choose discipline or instant reward.",
-    options: [
-      {
-        id: "buy-now",
-        label: "Buy now",
-        walletDelta: -90,
-        quality: "weak",
-        treeHealthDelta: -3,
-        resultText: "Impulse spending lowered your safety margin.",
-      },
-      {
-        id: "plan-first",
-        label: "Plan first and skip",
-        walletDelta: 0,
-        savingsDelta: 70,
-        quality: "strong",
-        treeHealthDelta: 3,
-        resultText: "Good control protected your long-term progress.",
-      },
-    ],
-  },
-];
-
-function pickSuddenEvent(day: number): SuddenEvent {
-  const index = (day * 7 + 3) % SUDDEN_EVENTS.length;
-  return SUDDEN_EVENTS[index];
-}
 
 const LEADERBOARD_NAMES = ["Rahul", "Priya", "Aarav", "Ananya", "Kabir"];
 
@@ -122,10 +81,8 @@ function calculateLevelFromExp(totalEXP: number): number {
 
 function createLeaderboard(playerLevel: number, totalEXP: number): LeaderboardEntry[] {
   return LEADERBOARD_NAMES.map((name, index) => {
-    const levelShift = (index % 3) - 1;
-    const randomScoreNoise = Math.floor(Math.random() * 80);
-    const level = Math.max(1, playerLevel + levelShift + (index === 0 ? 1 : 0));
-    const score = Math.max(120, totalEXP + level * 90 + randomScoreNoise);
+    const level = Math.max(1, playerLevel + ((index % 3) - 1));
+    const score = Math.max(80, totalEXP + level * 110 + Math.floor(Math.random() * 45));
     const trend: LeaderboardEntry["trend"] =
       index % 3 === 0 ? "up" : index % 3 === 1 ? "steady" : "down";
 
@@ -147,7 +104,7 @@ function appendDailySummaryToLocalStorage(summary: DailySummary) {
     const parsed = current ? (JSON.parse(current) as DailySummary[]) : [];
     window.localStorage.setItem(key, JSON.stringify([...parsed, summary]));
   } catch {
-    // Ignore localStorage write errors and keep game playable.
+    // Ignore localStorage write failures to keep gameplay responsive.
   }
 }
 
@@ -155,19 +112,31 @@ function calculateNetWorth(
   state: GameState,
   wallet: number = state.player.wallet,
   savingsBalance: number = state.savings.balance,
+  fixedDeposits = state.fixedDeposits,
+  sips = state.sips,
   assets = state.ownedAssets,
 ): number {
-  const totalAssetValue = assets.reduce((sum, asset) => sum + asset.currentValue, 0);
-  return wallet + savingsBalance + totalAssetValue;
+  const fdValue = fixedDeposits.reduce((sum, fd) => {
+    if (fd.matured || state.currentDay >= fd.maturityDay) {
+      return sum + Math.floor(fd.principal * (1 + fd.interestRate));
+    }
+    return sum + fd.principal;
+  }, 0);
+  const sipValue = sips.reduce((sum, sip) => sum + sip.currentValue, 0);
+  const assetValue = assets.reduce((sum, asset) => sum + calculateAssetValue(asset, state.currentDay), 0);
+
+  return wallet + savingsBalance + fdValue + sipValue + assetValue;
 }
 
 function getGameOverPatch(
   state: GameState,
   wallet: number,
   savingsBalance: number,
+  fixedDeposits = state.fixedDeposits,
+  sips = state.sips,
   assets = state.ownedAssets,
 ): Pick<GameState, "isPlaying" | "isGameOver" | "gameOverReason"> {
-  const netWorth = calculateNetWorth(state, wallet, savingsBalance, assets);
+  const netWorth = calculateNetWorth(state, wallet, savingsBalance, fixedDeposits, sips, assets);
   if (netWorth >= 0) {
     return {
       isPlaying: true,
@@ -179,92 +148,238 @@ function getGameOverPatch(
   return {
     isPlaying: false,
     isGameOver: true,
-    gameOverReason:
-      "Your wallet + savings + assets fell below ₹0. Build an emergency fund and avoid unchecked liabilities.",
+    gameOverReason: "You went bankrupt! Money management is tough, but you can try again.",
   };
 }
 
-function settleEmergencyCost(
-  wallet: number,
-  savingsBalance: number,
-  cost: number,
-): {
-  wallet: number;
-  savingsBalance: number;
-  fromWallet: number;
-  fromSavings: number;
-  deficit: number;
-} {
-  const usableWallet = Math.max(0, wallet);
-  const usableSavings = Math.max(0, savingsBalance);
-  const fromWallet = Math.min(usableWallet, cost);
-  const remainingAfterWallet = cost - fromWallet;
-  const fromSavings = Math.min(usableSavings, remainingAfterWallet);
-  const deficit = remainingAfterWallet - fromSavings;
+function toLegacyWeatherIntensity(event: WeatherEvent): number {
+  return event === "none" ? 0 : 100;
+}
+
+function createLegacyStormEmergency(): StormEmergency {
+  return {
+    title: "⛈️ Storm Emergency",
+    description: "Storm caused emergency spending and temporary health stress for your tree.",
+    cost: GAME_CONFIG.WEATHER_STORM_EMERGENCY_LOSS,
+    fromWallet: GAME_CONFIG.WEATHER_STORM_EMERGENCY_LOSS,
+    fromSavings: 0,
+    deficit: 0,
+  };
+}
+
+function getRiskLevel(riskMeter: number): RiskLevel {
+  if (riskMeter >= 70) return "high";
+  if (riskMeter >= 35) return "medium";
+  return "low";
+}
+
+function buildPhaseSnapshot(state: GameState, currentPhase: number): PhaseProgressSnapshot {
+  return {
+    currentPhase,
+    currentDay: state.currentDay,
+    totalWaterings: state.tree.totalWaterings,
+    completedScenarios: state.completedScenarios,
+    savingsBalance: state.savings.balance,
+    hasAnyInvestment: state.fixedDeposits.length > 0 || state.sips.length > 0,
+    treeStage: state.tree.stage,
+  };
+}
+
+function getPhaseProgressPatch(state: GameState): Partial<GameState> {
+  if (state.phaseUnlockModal) {
+    return {};
+  }
+
+  const nextPhase = getNextPhase(buildPhaseSnapshot(state, state.currentPhase));
+  if (!nextPhase) {
+    return {};
+  }
 
   return {
-    wallet: wallet - fromWallet - deficit,
-    savingsBalance: savingsBalance - fromSavings,
-    fromWallet,
-    fromSavings,
-    deficit,
+    currentPhase: nextPhase,
+    phaseUnlockModal: buildPhaseUnlockPayload(state.currentPhase, nextPhase),
   };
 }
 
-function getAITip(state: GameState): string {
-  if (state.player.currentDay === 1 && state.tree.timesWateredToday === 0) {
-    return AI_TIPS.firstDay;
+function getLoanOutstanding(
+  loan: EmergencyLoan | null,
+  currentDay: number,
+): { outstandingAmount: number; daysOutstanding: number } {
+  if (!loan) {
+    return { outstandingAmount: 0, daysOutstanding: 0 };
   }
-  if (state.player.wallet < 20 && state.player.waterUnits === 0) {
-    return AI_TIPS.lowMoney;
+
+  const daysOutstanding = Math.max(0, currentDay - loan.startDay);
+  const gross = Math.floor(loan.principal * (1 + loan.dailyInterestRate * daysOutstanding));
+  const outstandingAmount = Math.max(0, gross - loan.totalPaid);
+
+  return { outstandingAmount, daysOutstanding };
+}
+
+function buildActiveEffects(state: GameState): ActiveEffect[] {
+  const effects: ActiveEffect[] = [];
+
+  if (state.currentWeather === "drought") {
+    effects.push({
+      id: "weather-drought",
+      source: "Drought",
+      type: "debuff",
+      impactText: "Watering earnings reduced by 60%.",
+      remainingDays: 1,
+      percentImpact: -60,
+    });
   }
-  if (state.player.waterUnits === 0) {
-    return AI_TIPS.noWater;
+
+  if (state.currentWeather === "storm") {
+    effects.push({
+      id: "weather-storm",
+      source: "Storm",
+      type: "debuff",
+      impactText: `Emergency loss of ₹${GAME_CONFIG.WEATHER_STORM_EMERGENCY_LOSS} and tree stress.`,
+      remainingDays: Math.max(0, state.stormPenaltyDaysRemaining),
+    });
   }
-  if (state.tree.timesWateredToday >= 3) {
-    return AI_TIPS.wateringDone;
+
+  if (state.currentWeather === "rain") {
+    effects.push({
+      id: "weather-rain",
+      source: "Rain",
+      type: "neutral",
+      impactText: "Rain day has no earnings bonus or penalty.",
+      remainingDays: 1,
+      percentImpact: 0,
+    });
   }
-  if (state.sips.length > 0) {
-    return AI_TIPS.sipTip;
+
+  if (state.emergencyLoan) {
+    const loan = getLoanOutstanding(state.emergencyLoan, state.currentDay);
+    effects.push({
+      id: "loan-active",
+      source: "Emergency Loan",
+      type: "debuff",
+      impactText: `Outstanding ₹${loan.outstandingAmount} at ${Math.round(
+        state.emergencyLoan.dailyInterestRate * 100,
+      )}% daily interest.`,
+      remainingDays: null,
+    });
   }
-  if (state.savings.balance > 100) {
-    return AI_TIPS.goodSaver;
+
+  for (const asset of state.ownedAssets) {
+    if (asset.type === "appreciating") {
+      const boost = Math.round((asset.appreciationRate || 0) * 100);
+      effects.push({
+        id: `asset-${asset.id}`,
+        source: asset.name,
+        type: boost > 0 ? "buff" : "neutral",
+        impactText: `Long-term earning support around +${boost}%.`,
+        remainingDays: null,
+        percentImpact: boost,
+      });
+      continue;
+    }
+
+    const maintenanceInterval =
+      asset.maintenanceInterval || GAME_CONFIG.DEPRECIATING_MAINTENANCE_INTERVAL_DAYS;
+    const daysOwned = Math.max(0, state.currentDay - asset.purchaseDay);
+    const cycles = Math.floor(daysOwned / Math.max(1, maintenanceInterval));
+    const baseBoostPercent = Math.round(((asset.boostMultiplier || 1) - 1) * 100);
+    const adjustedPercent =
+      baseBoostPercent - cycles * GAME_CONFIG.DEPRECIATING_EFFECT_DECAY_PERCENT;
+
+    effects.push({
+      id: `asset-${asset.id}`,
+      source: asset.name,
+      type: adjustedPercent > 0 ? "buff" : "debuff",
+      impactText:
+        adjustedPercent > 0
+          ? `Current earning boost: +${adjustedPercent}%`
+          : `Current earning drag: ${adjustedPercent}%`,
+      remainingDays: maintenanceInterval - (daysOwned % Math.max(1, maintenanceInterval)),
+      percentImpact: adjustedPercent,
+    });
   }
-  if (state.player.investmentBalance > 100) {
-    return AI_TIPS.investor;
+
+  return effects.slice(0, 12);
+}
+
+const EVENT_MIN_PHASE: Record<string, number> = {
+  "bike-offer": 7,
+  "scooter-offer": 7,
+  "festival-gift-offer": 2,
+  "delay-bill-offer": 2,
+  "emergency-friend-help": 4,
+  "quick-fd-bonus": 5,
+  "appreciating-asset-discount": 7,
+  "car-offer": 7,
+};
+
+function getEventForPhase(day: number, phase: number): SimpleEvent | null {
+  if (!isFeatureUnlocked("simple-scenarios", phase)) {
+    return null;
   }
-  if (state.ownedAssets.length > 0) {
-    return AI_TIPS.shopTip;
+
+  for (let offset = 0; offset < SIMPLE_EVENTS.length; offset += 1) {
+    const candidate = getSimpleEventForDay(day + offset);
+    const minPhase = EVENT_MIN_PHASE[candidate.id] || 2;
+    if (phase >= minPhase) {
+      return candidate;
+    }
   }
-  return AI_TIPS.balanced;
+
+  return null;
 }
 
 function buildDailySummaryFromState(
   state: GameState,
-  inflationRate: number,
   inflationLoss: number,
+  walletAfterInflation: number,
 ): DailySummary {
-  const decisions = state.dailyDecisionLog.filter(
-    (entry) => entry.day === state.player.currentDay,
-  );
+  const decisions = state.dailyDecisionLog.filter((entry) => entry.day === state.player.currentDay);
   const temptationsAccepted = decisions
     .filter((entry) => entry.wasTemptationAccepted)
     .map((entry) => entry.eventTitle);
-  const maintenancePaid = state.maintenanceChargesToday.reduce(
-    (sum, charge) => sum + charge.cost,
-    0,
-  );
+
   const spentFromChoices = decisions.reduce((sum, entry) => {
     const outgoing = Math.max(0, -entry.walletDelta) + Math.max(0, -entry.savingsDelta);
     return sum + outgoing;
   }, 0);
 
+  const loan = getLoanOutstanding(state.emergencyLoan, state.player.currentDay);
+  const maintenancePaid = state.maintenanceChargesToday.reduce((sum, item) => sum + item.cost, 0);
+  const eventCashFlow = decisions.reduce(
+    (sum, entry) => sum + entry.walletDelta + entry.savingsDelta + entry.investmentDelta,
+    0,
+  );
+  const savedToday = state.todayBankSaved + state.todaySavingsDeposited;
+  const investedToday = state.todayInvested;
+  const earningsToday = Math.max(0, state.player.totalEarnings - state.dayStartTotalEarnings);
+  const netCashFlow =
+    earningsToday +
+    eventCashFlow +
+    state.loanTakenToday -
+    (state.loanRepaidToday +
+      state.loanInterestPaidToday +
+      state.weatherLossToday +
+      maintenancePaid +
+      inflationLoss +
+      savedToday +
+      investedToday);
+  const netWorth = calculateNetWorth(
+    state,
+    walletAfterInflation,
+    state.savings.balance,
+    state.fixedDeposits,
+    state.sips,
+    state.ownedAssets,
+  );
+
   return {
     id: createId(),
     currentDay: state.player.currentDay,
+    currentPhase: state.currentPhase,
     decisions,
     treeHealth: state.tree.health,
-    walletBalance: state.player.wallet,
+    walletBalance: walletAfterInflation,
     savingsBalance: state.savings.balance,
     bankBalance: state.player.bankBalance,
     investmentBalance: state.player.investmentBalance,
@@ -290,17 +405,47 @@ function buildDailySummaryFromState(
     })),
     inflation: {
       day: state.player.currentDay,
-      rate: inflationRate,
+      rate: GAME_CONFIG.DAILY_CASH_INFLATION_RATE,
       cashPowerLoss: inflationLoss,
     },
     pendingConsequences: state.pendingEvents,
     temptationsAccepted,
-    savedToday: state.todayBankSaved + state.todaySavingsDeposited,
-    investedToday: state.todayInvested,
-    spentToday: spentFromChoices + maintenancePaid + inflationLoss,
+    savedToday,
+    investedToday,
+    spentToday:
+      spentFromChoices +
+      inflationLoss +
+      maintenancePaid +
+      state.weatherLossToday +
+      state.loanInterestPaidToday +
+      state.loanRepaidToday,
     maintenancePaid,
     weather: state.currentWeather,
     riskLevel: state.riskLevel,
+    netWorth,
+    activeEffects: buildActiveEffects(state),
+    loanSnapshot: {
+      loanTakenToday: state.loanTakenToday,
+      loanRepaidToday: state.loanRepaidToday,
+      loanInterestPaidToday: state.loanInterestPaidToday,
+      hasActiveLoan: Boolean(state.emergencyLoan),
+      principal: state.emergencyLoan?.principal || 0,
+      daysOutstanding: loan.daysOutstanding,
+      outstandingAmount: loan.outstandingAmount,
+    },
+    financialBreakdown: {
+      earningsToday,
+      weatherLossToday: state.weatherLossToday,
+      maintenancePaidToday: maintenancePaid,
+      inflationLossToday: inflationLoss,
+      eventCashFlow,
+      savedToday,
+      investedToday,
+      loanTakenToday: state.loanTakenToday,
+      loanRepaidToday: state.loanRepaidToday,
+      loanInterestPaidToday: state.loanInterestPaidToday,
+      netCashFlow,
+    },
   };
 }
 
@@ -322,6 +467,7 @@ function createInitialState(): GameState {
     reviewChatMessages: [],
     reviewStatus: "idle",
     reviewError: null,
+    aiReviewEnabled: false,
     lastAwardedReviewDay: 0,
     leaderboard: createLeaderboard(1, 0),
     hasPlayed: false,
@@ -329,7 +475,16 @@ function createInitialState(): GameState {
     treeHealth: { value: 100 },
     riskMeter: 0,
     riskLevel: "low",
+    currentPhase: 1,
+    completedScenarios: 0,
+    phaseUnlockModal: null,
+    emergencyLoan: null,
+    loanTakenToday: 0,
+    loanRepaidToday: 0,
+    loanInterestPaidToday: 0,
+    weatherLossToday: 0,
     pendingEvents: [],
+    currentSimpleEvent: null,
     activeDailyEvents: [],
     activeGameEvent: null,
     eventConsequences: [],
@@ -358,6 +513,9 @@ function createInitialState(): GameState {
     showMaintenancePopup: false,
     isGameOver: false,
     gameOverReason: null,
+    stockItems: STOCK_ITEMS,
+    stockUnlocked: false,
+    stormPenaltyDaysRemaining: 0,
     stormChanceModifier: 0,
     isPlaying: false,
     showEndOfDay: false,
@@ -368,12 +526,21 @@ function createInitialState(): GameState {
   };
 }
 
-const initialState: GameState = createInitialState();
+const initialState = createInitialState();
 
 export const useGameStore = create<GameState & GameActions>()(
   persist(
-    (set, get) => ({
-      ...initialState,
+    (set, get) => {
+      const syncProgression = () => {
+        const state = get();
+        const patch = getPhaseProgressPatch(state);
+        if (Object.keys(patch).length > 0) {
+          set(patch);
+        }
+      };
+
+      return {
+        ...initialState,
 
       startJourney: () => {
         const state = get();
@@ -383,8 +550,10 @@ export const useGameStore = create<GameState & GameActions>()(
           currentScreen: "play",
           isPlaying: true,
           hasPlayed: true,
+          currentSimpleEvent: getEventForPhase(state.currentDay, state.currentPhase),
           reviewStatus: "idle",
           reviewError: null,
+          aiReviewEnabled: false,
           latestGeminiReview: null,
           reviewChatMessages: [],
           aiTip: AI_TIPS.firstDay,
@@ -399,25 +568,32 @@ export const useGameStore = create<GameState & GameActions>()(
           return lastSummary;
         }
 
-        const inflationRate = pickDailyInflationRate();
-        const inflationResult = applyInflationToCash(state.player.wallet, inflationRate);
-        const inflationLoss = inflationResult.loss;
-        const walletAfterInflation = inflationResult.adjustedWallet;
-        const summary = buildDailySummaryFromState(state, inflationRate, inflationLoss);
+        const inflationResult = applyInflationToCash(
+          state.player.wallet,
+          GAME_CONFIG.DAILY_CASH_INFLATION_RATE,
+        );
+        const summary = buildDailySummaryFromState(
+          state,
+          inflationResult.loss,
+          inflationResult.adjustedWallet,
+        );
 
         set({
           player: {
             ...state.player,
-            wallet: walletAfterInflation,
+            wallet: inflationResult.adjustedWallet,
           },
           dailySummaries: [...state.dailySummaries, summary],
-          currentInflationRate: inflationRate,
-          inflationImpactToday: inflationLoss,
-          reviewStatus: "loading",
-          reviewError: null,
-          latestGeminiReview: null,
-          reviewChatMessages: [],
-          ...getGameOverPatch(state, walletAfterInflation, state.savings.balance),
+          currentInflationRate: GAME_CONFIG.DAILY_CASH_INFLATION_RATE,
+          inflationImpactToday: inflationResult.loss,
+          ...getGameOverPatch(
+            state,
+            inflationResult.adjustedWallet,
+            state.savings.balance,
+            state.fixedDeposits,
+            state.sips,
+            state.ownedAssets,
+          ),
         });
 
         appendDailySummaryToLocalStorage(summary);
@@ -425,28 +601,53 @@ export const useGameStore = create<GameState & GameActions>()(
       },
 
       setGeminiReview: (review: GeminiReview) => {
-        const state = get();
-        const clampedExp = Math.max(0, Math.min(100, Math.floor(review.exp)));
-        const shouldAward = state.lastAwardedReviewDay !== review.day;
-        const nextTotalEXP = shouldAward ? state.totalEXP + clampedExp : state.totalEXP;
-        const nextLevel = calculateLevelFromExp(nextTotalEXP);
-
+        const clampedExtra = Math.max(0, Math.min(GAME_CONFIG.REVIEW_MAX_EXTRA_EXP, Math.floor(review.exp)));
         set({
           latestGeminiReview: {
             ...review,
-            exp: clampedExp,
+            exp: clampedExtra,
           },
-          totalEXP: nextTotalEXP,
-          playerLevel: nextLevel,
-          lastAwardedReviewDay: shouldAward ? review.day : state.lastAwardedReviewDay,
           reviewStatus: "ready",
           reviewError: null,
         });
-        get().refreshLeaderboard();
       },
 
       setReviewStatus: (status, error = null) => {
         set({ reviewStatus: status, reviewError: error });
+      },
+
+      setAiReviewEnabled: (enabled: boolean) => {
+        set({ aiReviewEnabled: enabled });
+      },
+
+      isFeatureUnlocked: (feature: UnlockFeature) => {
+        const state = get();
+        return isFeatureUnlocked(feature, state.currentPhase);
+      },
+
+      dismissPhaseUnlockModal: () => {
+        set({ phaseUnlockModal: null });
+        syncProgression();
+      },
+
+      awardNightExp: (extraExp: number, day: number) => {
+        const state = get();
+        if (state.lastAwardedReviewDay === day) return;
+
+        const clampedExtra = Math.max(0, Math.min(GAME_CONFIG.REVIEW_MAX_EXTRA_EXP, Math.floor(extraExp)));
+        const gained = GAME_CONFIG.REVIEW_BASE_EXP + clampedExtra;
+        const nextTotalEXP = state.totalEXP + gained;
+        const nextLevel = calculateLevelFromExp(nextTotalEXP);
+
+        set({
+          totalEXP: nextTotalEXP,
+          playerLevel: nextLevel,
+          stockUnlocked:
+            nextLevel >= GAME_CONFIG.STOCK_UNLOCK_LEVEL &&
+            isFeatureUnlocked("stock-market", state.currentPhase),
+          lastAwardedReviewDay: day,
+        });
+        get().refreshLeaderboard();
       },
 
       addReviewChatMessage: (message: GeminiChatMessage) => {
@@ -464,15 +665,13 @@ export const useGameStore = create<GameState & GameActions>()(
 
       refreshLeaderboard: () => {
         const state = get();
-        set({
-          leaderboard: createLeaderboard(state.playerLevel, state.totalEXP),
-        });
+        set({ leaderboard: createLeaderboard(state.playerLevel, state.totalEXP) });
       },
 
-      // Water the tree
       waterTree: () => {
         const state = get();
         if (!state.isPlaying) return;
+        if (!isFeatureUnlocked("water-usage", state.currentPhase)) return;
         if (!canWaterTree(state.tree, state.player.waterUnits)) return;
 
         const baseEarnings = calculateTreeYield(
@@ -483,6 +682,7 @@ export const useGameStore = create<GameState & GameActions>()(
           state.riskMeter,
         );
         const earnings = applyWeatherModifier(baseEarnings, state.currentWeather);
+        const weatherLoss = Math.max(0, baseEarnings - earnings);
         const nextTree = updateTreeAfterWatering(state.tree);
         const nextWallet = state.player.wallet + earnings;
 
@@ -495,52 +695,126 @@ export const useGameStore = create<GameState & GameActions>()(
             waterUnits: state.player.waterUnits - 1,
             totalEarnings: state.player.totalEarnings + earnings,
           },
-          ...getGameOverPatch(state, nextWallet, state.savings.balance),
           showWaterEffect: true,
           showCoinEffect: true,
           lastCoinAmount: earnings,
-          hasPlayed: true,
+          weatherLossToday: state.weatherLossToday + weatherLoss,
+          aiTip: nextWallet < 80 ? AI_TIPS.lowMoney : AI_TIPS.healthy,
+          ...getGameOverPatch(
+            state,
+            nextWallet,
+            state.savings.balance,
+            state.fixedDeposits,
+            state.sips,
+            state.ownedAssets,
+          ),
         });
 
-        // Update AI tip after watering
-        const newState = get();
-        set({ aiTip: getAITip(newState) });
+        syncProgression();
 
-        // Auto-hide effects
-        setTimeout(
-          () => set({ showWaterEffect: false, showCoinEffect: false }),
-          1500,
-        );
+        setTimeout(() => set({ showWaterEffect: false, showCoinEffect: false }), 1200);
       },
 
-      // Buy water
       buyWater: (units: number) => {
         const state = get();
         if (!state.isPlaying) return;
+        if (!isFeatureUnlocked("water-usage", state.currentPhase)) return;
         const cost = calculateWaterCost(units, state.ownedAssets);
         if (state.player.wallet < cost) return;
 
         const nextWallet = state.player.wallet - cost;
-
         set({
           player: {
             ...state.player,
             wallet: nextWallet,
             waterUnits: state.player.waterUnits + units,
           },
-          ...getGameOverPatch(state, nextWallet, state.savings.balance),
+          ...getGameOverPatch(
+            state,
+            nextWallet,
+            state.savings.balance,
+            state.fixedDeposits,
+            state.sips,
+            state.ownedAssets,
+          ),
         });
       },
 
-      // Deposit to savings
+      triggerWeatherEvent: (event: WeatherEvent) => {
+        const state = get();
+        if (!isFeatureUnlocked("extreme-weather", state.currentPhase)) {
+          set({ currentWeather: "none", weatherIntensity: 0, weatherLossToday: 0 });
+          return;
+        }
+
+        if (event === "storm") {
+          const nextWallet = state.player.wallet - GAME_CONFIG.WEATHER_STORM_EMERGENCY_LOSS;
+          const nextTreeHealth = Math.max(
+            0,
+            state.tree.health - GAME_CONFIG.WEATHER_STORM_TREE_HEALTH_LOSS,
+          );
+
+          set({
+            currentWeather: "storm",
+            weatherIntensity: toLegacyWeatherIntensity("storm"),
+            activeStormEmergency: createLegacyStormEmergency(),
+            showStormEmergency: true,
+            stormPenaltyDaysRemaining: Math.max(0, GAME_CONFIG.WEATHER_STORM_TREE_HEALTH_DAYS - 1),
+            weatherLossToday: state.weatherLossToday + GAME_CONFIG.WEATHER_STORM_EMERGENCY_LOSS,
+            player: {
+              ...state.player,
+              wallet: nextWallet,
+            },
+            tree: {
+              ...state.tree,
+              health: nextTreeHealth,
+            },
+            treeHealth: { value: nextTreeHealth },
+            ...getGameOverPatch(
+              state,
+              nextWallet,
+              state.savings.balance,
+              state.fixedDeposits,
+              state.sips,
+              state.ownedAssets,
+            ),
+          });
+          return;
+        }
+
+        set({
+          currentWeather: event,
+          weatherIntensity: toLegacyWeatherIntensity(event),
+          activeStormEmergency: null,
+          showStormEmergency: false,
+        });
+      },
+
+      clearWeatherEvent: () => {
+        set({
+          currentWeather: "none",
+          weatherIntensity: 0,
+          activeStormEmergency: null,
+          showStormEmergency: false,
+        });
+      },
+
+      payWeatherCharge: () => {
+        // Rain has no charge in final rules. Keep as no-op clear for compatibility.
+        const state = get();
+        if (state.currentWeather === "rain") {
+          get().clearWeatherEvent();
+        }
+      },
+
       depositToSavings: (amount: number) => {
         const state = get();
         if (!state.isPlaying) return;
+        if (!isFeatureUnlocked("savings-account", state.currentPhase)) return;
         if (amount <= 0 || state.player.wallet < amount) return;
 
         const nextWallet = state.player.wallet - amount;
         const nextSavings = state.savings.balance + amount;
-
         set({
           savings: depositSavings(state.savings, amount),
           player: {
@@ -548,16 +822,24 @@ export const useGameStore = create<GameState & GameActions>()(
             wallet: nextWallet,
           },
           todaySavingsDeposited: state.todaySavingsDeposited + amount,
-          ...getGameOverPatch(state, nextWallet, nextSavings),
+          ...getGameOverPatch(
+            state,
+            nextWallet,
+            nextSavings,
+            state.fixedDeposits,
+            state.sips,
+            state.ownedAssets,
+          ),
         });
+
+        syncProgression();
       },
 
-      // Withdraw from savings
       withdrawFromSavings: (amount: number) => {
         const state = get();
         if (!state.isPlaying) return;
+        if (!isFeatureUnlocked("savings-account", state.currentPhase)) return;
         const result = withdrawSavings(state.savings, amount);
-
         const nextWallet = state.player.wallet + result.withdrawn;
 
         set({
@@ -566,172 +848,322 @@ export const useGameStore = create<GameState & GameActions>()(
             ...state.player,
             wallet: nextWallet,
           },
-          ...getGameOverPatch(state, nextWallet, result.savings.balance),
+          ...getGameOverPatch(
+            state,
+            nextWallet,
+            result.savings.balance,
+            state.fixedDeposits,
+            state.sips,
+            state.ownedAssets,
+          ),
         });
       },
 
-      // Create fixed deposit
-      createFixedDeposit: (
-        amount: number,
-        durationDays: number = 3,
-      ) => {
+      takeEmergencyLoan: (amount: number) => {
+        const state = get();
+        if (!isFeatureUnlocked("bank-loans", state.currentPhase)) return false;
+        if (state.emergencyLoan) return false;
+        if (!GAME_CONFIG.EMERGENCY_LOAN_OPTIONS.includes(amount as 500 | 1000 | 2000)) return false;
+
+        const netWorth = calculateNetWorth(state);
+        const isEmergency =
+          state.isGameOver ||
+          state.player.wallet <= GAME_CONFIG.EMERGENCY_LOAN_DANGER_WALLET ||
+          netWorth <= 80;
+        if (!isEmergency) return false;
+
+        const loan: EmergencyLoan = {
+          id: createId(),
+          principal: amount,
+          startDay: state.currentDay,
+          dailyInterestRate: GAME_CONFIG.EMERGENCY_LOAN_DAILY_INTEREST_RATE,
+          totalPaid: 0,
+          totalInterestPaid: 0,
+        };
+
+        const nextWallet = state.player.wallet + amount;
+        set({
+          emergencyLoan: loan,
+          loanTakenToday: state.loanTakenToday + amount,
+          player: {
+            ...state.player,
+            wallet: nextWallet,
+          },
+          isGameOver: false,
+          isPlaying: true,
+          gameOverReason: null,
+        });
+
+        return true;
+      },
+
+      repayEmergencyLoan: () => {
+        const state = get();
+        if (!state.emergencyLoan) return false;
+
+        const loanInfo = getLoanOutstanding(state.emergencyLoan, state.currentDay);
+        if (loanInfo.outstandingAmount <= 0) {
+          set({ emergencyLoan: null });
+          return true;
+        }
+
+        if (state.player.wallet < loanInfo.outstandingAmount) return false;
+
+        const interestPart = Math.max(0, loanInfo.outstandingAmount - state.emergencyLoan.principal);
+        const nextWallet = state.player.wallet - loanInfo.outstandingAmount;
+        set({
+          emergencyLoan: null,
+          loanRepaidToday: state.loanRepaidToday + loanInfo.outstandingAmount,
+          loanInterestPaidToday: state.loanInterestPaidToday + interestPart,
+          player: {
+            ...state.player,
+            wallet: nextWallet,
+          },
+          ...getGameOverPatch(
+            state,
+            nextWallet,
+            state.savings.balance,
+            state.fixedDeposits,
+            state.sips,
+            state.ownedAssets,
+          ),
+        });
+
+        return true;
+      },
+
+      createFixedDeposit: (amount: number, durationDays: number) => {
         const state = get();
         if (!state.isPlaying) return;
+        if (!isFeatureUnlocked("investments", state.currentPhase)) return;
         if (amount <= 0 || state.player.wallet < amount) return;
 
         const fd = createFD(amount, state.player.currentDay, durationDays);
         if (!fd) return;
 
+        const nextWallet = state.player.wallet - amount;
+        const nextFDs = [...state.fixedDeposits, fd];
         set({
-          fixedDeposits: [...state.fixedDeposits, fd],
-          tree: {
-            ...state.tree,
-            health: Math.min(100, state.tree.health + 2),
-          },
-          treeHealth: { value: Math.min(100, state.tree.health + 2) },
+          fixedDeposits: nextFDs,
           player: {
             ...state.player,
-            wallet: state.player.wallet - amount,
+            wallet: nextWallet,
           },
           ...getGameOverPatch(
             state,
-            state.player.wallet - amount,
+            nextWallet,
             state.savings.balance,
+            nextFDs,
+            state.sips,
+            state.ownedAssets,
           ),
         });
+
+        syncProgression();
       },
 
-      // Withdraw fixed deposit
       withdrawFixedDeposit: (fdId: string) => {
         const state = get();
         if (!state.isPlaying) return;
-        const fd = state.fixedDeposits.find((f) => f.id === fdId);
+        const fd = state.fixedDeposits.find((item) => item.id === fdId);
         if (!fd) return;
 
         const result = withdrawFD(fd, state.player.currentDay);
+        const nextWallet = state.player.wallet + result.amount;
+        const nextFDs = state.fixedDeposits.filter((item) => item.id !== fdId);
 
         set({
-          fixedDeposits: state.fixedDeposits.filter((f) => f.id !== fdId),
+          fixedDeposits: nextFDs,
           player: {
             ...state.player,
-            wallet: state.player.wallet + result.amount,
+            wallet: nextWallet,
           },
           ...getGameOverPatch(
             state,
-            state.player.wallet + result.amount,
+            nextWallet,
             state.savings.balance,
+            nextFDs,
+            state.sips,
+            state.ownedAssets,
           ),
         });
       },
 
-      // Create SIP
       createSIP: (amount: number, intervalDays: number) => {
         const state = get();
         if (!state.isPlaying) return;
+        if (!isFeatureUnlocked("investments", state.currentPhase)) return;
         if (amount <= 0 || state.player.wallet < amount) return;
 
         const sip = createNewSIP(amount, intervalDays, state.player.currentDay);
         if (!sip) return;
 
+        const nextWallet = state.player.wallet - amount;
+        const nextSips = [...state.sips, sip];
         set({
-          sips: [...state.sips, sip],
-          tree: {
-            ...state.tree,
-            health: Math.min(100, state.tree.health + 2),
-          },
-          treeHealth: { value: Math.min(100, state.tree.health + 2) },
+          sips: nextSips,
           player: {
             ...state.player,
-            wallet: state.player.wallet - amount, // First installment
+            wallet: nextWallet,
           },
           ...getGameOverPatch(
             state,
-            state.player.wallet - amount,
+            nextWallet,
             state.savings.balance,
+            state.fixedDeposits,
+            nextSips,
+            state.ownedAssets,
           ),
         });
+
+        syncProgression();
       },
 
-      // Cancel SIP
       cancelSIP: (sipId: string) => {
         const state = get();
         if (!state.isPlaying) return;
-        const sip = state.sips.find((s) => s.id === sipId);
+        const sip = state.sips.find((item) => item.id === sipId);
         if (!sip) return;
 
         const result = cancelSIPFn(sip);
+        const nextWallet = state.player.wallet + result.returnAmount;
+        const nextSips = state.sips.filter((item) => item.id !== sipId);
 
         set({
-          sips: state.sips.filter((s) => s.id !== sipId),
+          sips: nextSips,
           player: {
             ...state.player,
-            wallet: state.player.wallet + result.returnAmount,
+            wallet: nextWallet,
           },
           ...getGameOverPatch(
             state,
-            state.player.wallet + result.returnAmount,
+            nextWallet,
             state.savings.balance,
+            state.fixedDeposits,
+            nextSips,
+            state.ownedAssets,
           ),
         });
       },
 
-      // Buy asset
+      saveToBank: (amount: number) => {
+        const state = get();
+        if (!state.isPlaying) return;
+        if (!isFeatureUnlocked("savings-account", state.currentPhase)) return;
+        if (amount <= 0 || state.player.wallet < amount) return;
+
+        const nextWallet = state.player.wallet - amount;
+        set({
+          player: {
+            ...state.player,
+            wallet: nextWallet,
+            bankBalance: state.player.bankBalance + amount,
+          },
+          todayBankSaved: state.todayBankSaved + amount,
+          ...getGameOverPatch(
+            state,
+            nextWallet,
+            state.savings.balance,
+            state.fixedDeposits,
+            state.sips,
+            state.ownedAssets,
+          ),
+        });
+
+        syncProgression();
+      },
+
+      investMoney: (amount: number) => {
+        const state = get();
+        if (!state.isPlaying) return;
+        if (!isFeatureUnlocked("investments", state.currentPhase)) return;
+        if (amount <= 0 || state.player.wallet < amount) return;
+
+        const nextWallet = state.player.wallet - amount;
+        set({
+          player: {
+            ...state.player,
+            wallet: nextWallet,
+            investmentBalance: state.player.investmentBalance + amount,
+          },
+          todayInvested: state.todayInvested + amount,
+          ...getGameOverPatch(
+            state,
+            nextWallet,
+            state.savings.balance,
+            state.fixedDeposits,
+            state.sips,
+            state.ownedAssets,
+          ),
+        });
+
+        syncProgression();
+      },
+
       buyAsset: (assetId: string) => {
         const state = get();
         if (!state.isPlaying) return;
-        const marketAsset = state.marketAssets.find((a) => a.id === assetId);
+        if (!isFeatureUnlocked("shop-assets", state.currentPhase)) return;
+        const marketAsset = state.marketAssets.find((item) => item.id === assetId);
         if (!marketAsset) return;
         if (state.player.wallet < marketAsset.currentPrice) return;
 
         const newAsset = purchaseAsset(marketAsset, state.player.currentDay);
+        const nextWallet = state.player.wallet - marketAsset.currentPrice;
+        const nextAssets = [...state.ownedAssets, newAsset];
 
         set({
-          ownedAssets: [...state.ownedAssets, newAsset],
+          ownedAssets: nextAssets,
           player: {
             ...state.player,
-            wallet: state.player.wallet - marketAsset.currentPrice,
+            wallet: nextWallet,
           },
           ...getGameOverPatch(
             state,
-            state.player.wallet - marketAsset.currentPrice,
+            nextWallet,
             state.savings.balance,
-            [...state.ownedAssets, newAsset],
+            state.fixedDeposits,
+            state.sips,
+            nextAssets,
           ),
         });
+
+        syncProgression();
       },
 
-      // Sell asset
       sellAsset: (assetId: string) => {
         const state = get();
         if (!state.isPlaying) return;
-        const asset = state.ownedAssets.find((a) => a.id === assetId);
+        const asset = state.ownedAssets.find((item) => item.id === assetId);
         if (!asset) return;
 
         const saleValue = calculateAssetValue(asset, state.player.currentDay);
+        const nextWallet = state.player.wallet + saleValue;
+        const nextAssets = state.ownedAssets.filter((item) => item.id !== assetId);
 
         set({
-          ownedAssets: state.ownedAssets.filter((a) => a.id !== assetId),
+          ownedAssets: nextAssets,
           player: {
             ...state.player,
-            wallet: state.player.wallet + saleValue,
+            wallet: nextWallet,
           },
           ...getGameOverPatch(
             state,
-            state.player.wallet + saleValue,
+            nextWallet,
             state.savings.balance,
-            state.ownedAssets.filter((a) => a.id !== assetId),
+            state.fixedDeposits,
+            state.sips,
+            nextAssets,
           ),
         });
       },
 
-      // End day
       endDay: () => {
         const state = get();
-        if (!state.isPlaying || state.showSuddenEvent) return;
+        if (!state.isPlaying) return;
         set({ showEndOfDay: true, currentScreen: "end-day" });
       },
 
-      // Start new day
       startNewDay: () => {
         const preState = get();
         if (!preState.isPlaying) return;
@@ -740,82 +1172,83 @@ export const useGameStore = create<GameState & GameActions>()(
         const state = get();
         const nextDay = state.currentDay + 1;
 
-        // Apply daily changes
-        const newSavings = applySavingsInterest(state.savings);
-        const newFDs = updateFDMaturityStatus(state.fixedDeposits, nextDay);
-        const newAssets = updateAssetValues(state.ownedAssets, nextDay);
-        const maintenanceCharges = calculateDailyMaintenanceBreakdown(newAssets, nextDay);
-        const maintenanceTotal = maintenanceCharges.reduce((sum, item) => sum + item.cost, 0);
-        
-        // Apply SIP growth
-        const newSips = applySIPGrowth(state.sips, nextDay);
-        
-        // Investment growth (5% daily)
-        const investmentGrowth = Math.floor(state.player.investmentBalance * 0.05);
-        
-        // Bank interest (1% daily) - applied to wallet when bank balance transfers
+        const nextSavings = applySavingsInterest(state.savings);
+        const nextFDs = updateFDMaturityStatus(state.fixedDeposits, nextDay);
+        const nextAssets = updateAssetValues(state.ownedAssets, nextDay);
+        const maintenanceBreakdown = calculateDailyMaintenanceBreakdown(nextAssets, nextDay);
+        const maintenanceTotal = maintenanceBreakdown.reduce((sum, item) => sum + item.cost, 0);
+
+        const pendingResolution = resolvePendingConsequences(
+          nextDay,
+          state.pendingEvents,
+          nextSavings.balance,
+        );
+
+        let nextTree = resetTreeForNewDay(state.tree);
+        let stormPenaltyRemaining = state.stormPenaltyDaysRemaining;
+        if (stormPenaltyRemaining > 0) {
+          nextTree = {
+            ...nextTree,
+            health: Math.max(0, nextTree.health - GAME_CONFIG.WEATHER_STORM_TREE_HEALTH_LOSS),
+          };
+          stormPenaltyRemaining -= 1;
+        }
+
+        nextTree = {
+          ...nextTree,
+          health: Math.max(0, Math.min(100, nextTree.health + pendingResolution.treeHealthDelta)),
+        };
+
         const bankInterest = Math.floor(state.player.bankBalance * 0.01);
+        const walletBeforeSIP =
+          state.player.wallet +
+          state.player.bankBalance +
+          bankInterest +
+          pendingResolution.walletDelta;
 
-        // Calculate new wallet (bank balance + interest transfers to wallet, then maintenance is charged)
-        const newWallet =
-          state.player.wallet + state.player.bankBalance + bankInterest - maintenanceTotal;
-
-        // Process SIP installments for the new day
+        let nextSips = applySIPGrowth(state.sips, nextDay);
         let sipDeductions = 0;
-        let updatedSips = newSips;
-        for (let i = 0; i < updatedSips.length; i++) {
-          const sip = updatedSips[i];
-          const result = processSIPForDay(sip, nextDay, newWallet - sipDeductions);
+        for (const sip of nextSips) {
+          const result = processSIPForDay(sip, nextDay, walletBeforeSIP - sipDeductions);
           if (result.invested) {
-            updatedSips = updatedSips.map((s) => s.id === sip.id ? result.sip : s);
+            nextSips = nextSips.map((item) => (item.id === sip.id ? result.sip : item));
             sipDeductions += result.amountDeducted;
           }
         }
 
-        const walletAfterSIP = newWallet - sipDeductions;
-        const gameOverPatch = getGameOverPatch(
-          state,
-          walletAfterSIP,
-          newSavings.balance,
-          newAssets,
-        );
-        const shouldTriggerSuddenEvent =
-          ENABLE_LEGACY_SUDDEN_EVENTS && nextDay >= 4 && !gameOverPatch.isGameOver;
-        const suddenEvent = shouldTriggerSuddenEvent ? pickSuddenEvent(nextDay) : null;
-        const pendingResolution = resolvePendingEvents(nextDay, state.pendingEvents);
-        const rolledEvents = generateDailyEvents({
-          currentDay: nextDay,
-          riskMeter: state.riskMeter,
-          savings: newSavings,
-        });
-        const dailyEvents: Event[] = [...pendingResolution.dueEvents, ...rolledEvents].slice(
-          0,
-          GAME_CONFIG.MAX_EVENTS_PER_DAY,
-        );
-        const nextTree = resetTreeForNewDay(state.tree);
-        const nextRiskMeter = Math.max(0, state.riskMeter - 3);
+        const nextWallet = walletBeforeSIP - sipDeductions - maintenanceTotal;
+        const nextRiskMeter = Math.max(0, state.riskMeter - 2);
+        const nextSimpleEvent = getEventForPhase(nextDay, state.currentPhase);
 
         set({
           tree: nextTree,
           treeHealth: { value: nextTree.health },
-          savings: newSavings,
-          fixedDeposits: newFDs,
-          sips: updatedSips,
-          ownedAssets: newAssets,
+          savings: nextSavings,
+          fixedDeposits: nextFDs,
+          sips: nextSips,
+          ownedAssets: nextAssets,
           player: {
             ...state.player,
             currentDay: nextDay,
-            wallet: walletAfterSIP,
+            wallet: nextWallet,
             bankBalance: 0,
-            investmentBalance: state.player.investmentBalance + investmentGrowth,
-            waterUnits: state.player.waterUnits,
           },
           currentDay: nextDay,
           riskMeter: nextRiskMeter,
           riskLevel: getRiskLevel(nextRiskMeter),
           pendingEvents: pendingResolution.remaining,
-          activeDailyEvents: dailyEvents,
-          activeGameEvent: dailyEvents[0] || null,
+          currentSimpleEvent: nextSimpleEvent,
+          activeDailyEvents: [],
+          activeGameEvent: null,
+          eventConsequences: [
+            ...state.eventConsequences,
+            ...pendingResolution.logs.map((entry) => ({
+              id: createId(),
+              icon: "🧾",
+              title: "Pending Consequence",
+              summary: entry,
+            })),
+          ].slice(-12),
           showEndOfDay: false,
           showLesson: false,
           currentLesson: null,
@@ -830,82 +1263,185 @@ export const useGameStore = create<GameState & GameActions>()(
           weatherIntensity: 0,
           activeStormEmergency: null,
           showStormEmergency: false,
-          maintenanceChargesToday: maintenanceCharges,
-          showMaintenancePopup: maintenanceCharges.length > 0,
-          activeSuddenEvent: suddenEvent,
-          showSuddenEvent: suddenEvent !== null,
-          lastSuddenEventDay: suddenEvent ? nextDay : state.lastSuddenEventDay,
+          stormPenaltyDaysRemaining: stormPenaltyRemaining,
+          maintenanceChargesToday: maintenanceBreakdown,
+          showMaintenancePopup: maintenanceBreakdown.length > 0,
           latestEventResolution: null,
           investmentPreviewDays: null,
           reviewStatus: "idle",
           reviewError: null,
+          latestGeminiReview: null,
           reviewChatMessages: [],
+          aiReviewEnabled: false,
+          stockUnlocked:
+            state.playerLevel >= GAME_CONFIG.STOCK_UNLOCK_LEVEL &&
+            isFeatureUnlocked("stock-market", state.currentPhase),
           hasPlayed: true,
-          ...gameOverPatch,
+          loanTakenToday: 0,
+          loanRepaidToday: 0,
+          loanInterestPaidToday: 0,
+          weatherLossToday: 0,
+          ...getGameOverPatch(state, nextWallet, nextSavings.balance, nextFDs, nextSips, nextAssets),
         });
 
-        // Update AI tip
-        const newState = get();
-        set({ aiTip: getAITip(newState) });
+        syncProgression();
+
+        const progressedState = get();
+        if (
+          !progressedState.currentSimpleEvent &&
+          isFeatureUnlocked("simple-scenarios", progressedState.currentPhase)
+        ) {
+          set({ currentSimpleEvent: getEventForPhase(progressedState.currentDay, progressedState.currentPhase) });
+        }
+
+        if (
+          progressedState.playerLevel >= GAME_CONFIG.STOCK_UNLOCK_LEVEL &&
+          isFeatureUnlocked("stock-market", progressedState.currentPhase)
+        ) {
+          set({ stockUnlocked: true });
+        }
+
         get().refreshLeaderboard();
       },
 
       advanceDay: () => {
         const state = get();
         if (!state.isPlaying) return;
-        if (state.showSuddenEvent || state.activeGameEvent) return;
         get().startNewDay();
       },
 
       handleEventChoice: (choiceId: string) => {
         const state = get();
-        const activeEvent = state.activeGameEvent;
-        if (!activeEvent) return;
+        if (!isFeatureUnlocked("simple-scenarios", state.currentPhase)) return;
+        const event = state.currentSimpleEvent as SimpleEvent | null;
+        if (!event) return;
 
-        const choice = activeEvent.choices.find((item) => item.id === choiceId);
+        const choice = event.choices.find((item) => item.id === choiceId);
         if (!choice) return;
 
-        const consequence = choice.consequence;
-        const nextWallet = state.player.wallet + (consequence.walletDelta || 0);
-        const nextSavings = Math.max(0, state.savings.balance + (consequence.savingsDelta || 0));
-        const nextInvestment = Math.max(
-          0,
-          state.player.investmentBalance + (consequence.investmentDelta || 0),
-        );
-        const nextTreeHealth = Math.max(
-          0,
-          Math.min(100, state.tree.health + (consequence.treeHealthDelta || 0)),
-        );
-        const nextRisk = Math.max(0, Math.min(100, state.riskMeter + (consequence.riskDelta || 0)));
-        const nextPending: PendingEvent[] = [...state.pendingEvents];
-        const wasTemptationAccepted = isTemptationAccepted(activeEvent, choiceId);
+        let walletDelta = 0;
+        const treeHealthDelta = 0;
+        const riskDelta = 0;
+        const savingsDelta = 0;
+        const investmentDelta = 0;
+        let nextFDs = [...state.fixedDeposits];
+        const nextSips = [...state.sips];
+        const assetsToAdd = [] as GameState["ownedAssets"];
+        const pendingToAdd: PendingEvent[] = [];
+        let consequenceSummary = "Skipped safely.";
+        const accepted = choice.id === "accept";
 
-        if (consequence.scheduleEventId && consequence.scheduleAfterDays) {
-          nextPending.push(
-            buildPendingEvent(
-              consequence.scheduleEventId,
-              state.currentDay + consequence.scheduleAfterDays,
-              `Triggered by ${activeEvent.title}`,
-            ),
-          );
+        if (accepted) {
+          switch (event.id) {
+            case "bike-offer": {
+              const bike = state.marketAssets.find((item) => item.id === "bike");
+              if (bike) {
+                assetsToAdd.push(purchaseAsset({ ...bike, currentPrice: 0 }, state.currentDay));
+                pendingToAdd.push(...queueEventConsequences(event.id, state.currentDay));
+                consequenceSummary = "Bike boost activated for 3 days. Repair scheduled on Day+4.";
+              }
+              break;
+            }
+            case "scooter-offer": {
+              const scooter = state.marketAssets.find((item) => item.id === "scooter");
+              if (scooter) {
+                assetsToAdd.push(purchaseAsset({ ...scooter, currentPrice: 0 }, state.currentDay));
+                pendingToAdd.push(...queueEventConsequences(event.id, state.currentDay));
+                consequenceSummary = "Scooter boost activated for 2 days. Repair scheduled on Day+3.";
+              }
+              break;
+            }
+            case "festival-gift-offer": {
+              if (state.player.wallet >= 120) {
+                walletDelta -= 120;
+                pendingToAdd.push(...queueEventConsequences(event.id, state.currentDay));
+                consequenceSummary = "Festival gift bought. Cashback and savings-check consequences scheduled.";
+              } else {
+                consequenceSummary = "Not enough cash for festival gift.";
+              }
+              break;
+            }
+            case "delay-bill-offer": {
+              walletDelta += 100;
+              pendingToAdd.push(...queueEventConsequences(event.id, state.currentDay));
+              consequenceSummary = "Bill delayed. Extra charge scheduled for Day+5.";
+              break;
+            }
+            case "emergency-friend-help": {
+              if (state.player.wallet >= 80) {
+                walletDelta -= 80;
+                pendingToAdd.push(...queueEventConsequences(event.id, state.currentDay));
+                consequenceSummary = "Friend help sent. Repayment outcome will arrive in 4 days.";
+              } else {
+                consequenceSummary = "Not enough wallet balance to lend ₹80.";
+              }
+              break;
+            }
+            case "quick-fd-bonus": {
+              if (state.player.wallet >= 150) {
+                const fd = createFD(150, state.currentDay, 7);
+                if (fd) {
+                  fd.interestRate = 0.11;
+                  nextFDs = [...nextFDs, fd];
+                  walletDelta -= 150;
+                  consequenceSummary = "Bonus FD created: ₹150 locked for 7 days at 11%.";
+                }
+              } else {
+                consequenceSummary = "Insufficient wallet for ₹150 bonus FD.";
+              }
+              break;
+            }
+            case "appreciating-asset-discount": {
+              if (state.player.wallet >= 200) {
+                const villageShop = state.marketAssets.find((item) => item.id === "village-shop");
+                if (villageShop) {
+                  assetsToAdd.push(
+                    purchaseAsset({ ...villageShop, currentPrice: 200 }, state.currentDay),
+                  );
+                  walletDelta -= 200;
+                  consequenceSummary = "Village Shop bought at discount with permanent +15% earning boost.";
+                }
+              } else {
+                consequenceSummary = "Insufficient wallet for ₹200 Village Shop discount.";
+              }
+              break;
+            }
+            case "car-offer": {
+              const car = state.marketAssets.find((item) => item.id === "car");
+              if (car) {
+                assetsToAdd.push(purchaseAsset({ ...car, currentPrice: 0 }, state.currentDay));
+                pendingToAdd.push(...queueEventConsequences(event.id, state.currentDay));
+                consequenceSummary = "Car boost activated for 3 days. Heavy maintenance scheduled on Day+4.";
+              }
+              break;
+            }
+            default:
+              break;
+          }
         }
 
-        const remainingEvents = state.activeDailyEvents.filter((event) => event.id !== activeEvent.id);
-        const summary = `${choice.icon} ${choice.label}`;
+        const nextWallet = state.player.wallet + walletDelta;
+        const nextSavings = Math.max(0, state.savings.balance + savingsDelta);
+        const nextInvestment = Math.max(0, state.player.investmentBalance + investmentDelta);
+        const nextTreeHealth = Math.max(0, Math.min(100, state.tree.health + treeHealthDelta));
+        const nextRisk = Math.max(0, Math.min(100, state.riskMeter + riskDelta));
+        const nextAssets = [...state.ownedAssets, ...assetsToAdd];
+        const nextPending = [...state.pendingEvents, ...pendingToAdd];
+
         const decision: DailyDecision = {
           id: createId(),
           day: state.currentDay,
-          eventId: activeEvent.id,
-          eventTitle: activeEvent.title,
+          eventId: event.id,
+          eventTitle: event.title,
           choiceId: choice.id,
           choiceLabel: choice.label,
-          walletDelta: consequence.walletDelta || 0,
-          savingsDelta: consequence.savingsDelta || 0,
-          investmentDelta: consequence.investmentDelta || 0,
-          treeHealthDelta: consequence.treeHealthDelta || 0,
-          riskDelta: consequence.riskDelta || 0,
-          consequenceSummary: summary,
-          wasTemptationAccepted,
+          walletDelta,
+          savingsDelta,
+          investmentDelta,
+          treeHealthDelta,
+          riskDelta,
+          consequenceSummary,
+          wasTemptationAccepted: accepted,
         };
 
         set({
@@ -913,12 +1449,14 @@ export const useGameStore = create<GameState & GameActions>()(
             ...state.player,
             wallet: nextWallet,
             investmentBalance: nextInvestment,
-            waterUnits: state.player.waterUnits + (consequence.rewardWater || 0),
           },
           savings: {
             ...state.savings,
             balance: nextSavings,
           },
+          fixedDeposits: nextFDs,
+          sips: nextSips,
+          ownedAssets: nextAssets,
           tree: {
             ...state.tree,
             health: nextTreeHealth,
@@ -926,93 +1464,56 @@ export const useGameStore = create<GameState & GameActions>()(
           treeHealth: { value: nextTreeHealth },
           riskMeter: nextRisk,
           riskLevel: getRiskLevel(nextRisk),
+          completedScenarios: state.completedScenarios + 1,
           pendingEvents: nextPending,
-          activeDailyEvents: remainingEvents,
-          activeGameEvent: remainingEvents[0] || null,
+          currentSimpleEvent: null,
+          activeDailyEvents: [],
+          activeGameEvent: null,
           dailyDecisionLog: [...state.dailyDecisionLog, decision],
           eventConsequences: [
             ...state.eventConsequences,
-            { id: createId(), icon: activeEvent.icon, title: activeEvent.title, summary },
-          ].slice(-8),
-          hasPlayed: true,
-          ...getGameOverPatch(state, nextWallet, nextSavings),
+            {
+              id: createId(),
+              icon: event.icon,
+              title: event.title,
+              summary: consequenceSummary,
+            },
+          ].slice(-12),
+          ...getGameOverPatch(state, nextWallet, nextSavings, nextFDs, nextSips, nextAssets),
         });
+
+        syncProgression();
       },
 
       applyInvestmentPreview: (days: number | null) => {
         set({ investmentPreviewDays: days });
       },
 
-      // Screen navigation
       setScreen: (screen: GameScreen) => {
         set({ currentScreen: screen });
       },
 
-      // Toggle bank modal (for anytime access)
       toggleBankModal: () => {
         const state = get();
         set({ showBankModal: !state.showBankModal });
       },
 
-      // Save to bank (end of day)
-      saveToBank: (amount: number) => {
-        const state = get();
-        if (!state.isPlaying) return;
-        if (amount <= 0 || state.player.wallet < amount) return;
-
-        const nextWallet = state.player.wallet - amount;
-
-        set({
-          player: {
-            ...state.player,
-            wallet: nextWallet,
-            bankBalance: state.player.bankBalance + amount,
-          },
-          todayBankSaved: state.todayBankSaved + amount,
-          ...getGameOverPatch(state, nextWallet, state.savings.balance),
-        });
-      },
-
-      // Invest money (end of day)
-      investMoney: (amount: number) => {
-        const state = get();
-        if (!state.isPlaying) return;
-        if (amount <= 0 || state.player.wallet < amount) return;
-
-        const nextWallet = state.player.wallet - amount;
-
-        set({
-          player: {
-            ...state.player,
-            wallet: nextWallet,
-            investmentBalance: state.player.investmentBalance + amount,
-          },
-          todayInvested: state.todayInvested + amount,
-          ...getGameOverPatch(state, nextWallet, state.savings.balance),
-        });
-      },
-
-      // Visual effects
       triggerWaterEffect: () => {
         set({ showWaterEffect: true });
-        setTimeout(() => set({ showWaterEffect: false }), 1500);
+        setTimeout(() => set({ showWaterEffect: false }), 1200);
       },
 
       triggerCoinEffect: (amount: number) => {
         set({ showCoinEffect: true, lastCoinAmount: amount });
-        setTimeout(() => set({ showCoinEffect: false }), 1500);
+        setTimeout(() => set({ showCoinEffect: false }), 1200);
       },
 
       setAITip: (tip: string | null) => {
         set({ aiTip: tip });
       },
 
-      // Dismiss lesson
       dismissLesson: () => {
-        set({
-          showLesson: false,
-          currentLesson: null,
-        });
+        set({ showLesson: false, currentLesson: null });
       },
 
       dismissMaintenancePopup: () => {
@@ -1023,55 +1524,10 @@ export const useGameStore = create<GameState & GameActions>()(
         set({ showStormEmergency: false });
       },
 
-      resolveSuddenEvent: (optionId: string) => {
-        const state = get();
-        if (!state.activeSuddenEvent || !state.showSuddenEvent) return;
-
-        const option = state.activeSuddenEvent.options.find((item) => item.id === optionId);
-        if (!option) return;
-
-        const nextWallet = state.player.wallet + option.walletDelta;
-        const nextSavingsBalance = Math.max(0, state.savings.balance + (option.savingsDelta || 0));
-        const nextTreeHealth = Math.max(
-          0,
-          Math.min(100, state.tree.health + (option.treeHealthDelta || 0)),
-        );
-        const nextInvestment = Math.max(
-          0,
-          state.player.investmentBalance + (option.investmentDelta || 0),
-        );
-
-        const resolution: EventResolutionLog = {
-          day: state.player.currentDay,
-          eventTitle: state.activeSuddenEvent.title,
-          optionLabel: option.label,
-          quality: option.quality,
-          resultText: option.resultText,
-        };
-
-        set({
-          player: {
-            ...state.player,
-            wallet: nextWallet,
-            investmentBalance: nextInvestment,
-          },
-          savings: {
-            ...state.savings,
-            balance: nextSavingsBalance,
-          },
-          tree: {
-            ...state.tree,
-            health: nextTreeHealth,
-          },
-          activeSuddenEvent: null,
-          showSuddenEvent: false,
-          latestEventResolution: resolution,
-          eventHistory: [...state.eventHistory, resolution],
-          ...getGameOverPatch(state, nextWallet, nextSavingsBalance),
-        });
+      resolveSuddenEvent: () => {
+        // Legacy sudden event flow disabled for the simplified final design.
       },
 
-      // Reset game
       resetGame: () => {
         if (typeof window !== "undefined") {
           const keys = Object.keys(window.localStorage);
@@ -1086,133 +1542,15 @@ export const useGameStore = create<GameState & GameActions>()(
         set(createInitialState());
       },
 
-      // Load game (called on mount)
       loadGame: () => {
-        // Persistence is handled by zustand/persist middleware
-        // This is here for manual reload if needed
+        // No-op: zustand persist handles hydration.
       },
-
-      // Trigger weather event
-      triggerWeatherEvent: (event: WeatherEvent) => {
-        const state = get();
-
-        if (event !== "storm") {
-          set({
-            currentWeather: event,
-            weatherIntensity: event === "none" ? 0 : 100,
-            activeStormEmergency: null,
-            showStormEmergency: false,
-          });
-          return;
-        }
-
-        const emergencyScenarios: Array<{ title: string; description: string; cost: number }> = [
-          {
-            title: "🚑 Medical Emergency",
-            description:
-              "A family medical issue needs immediate payment. Emergency funds are tested in real life exactly like this.",
-            cost: 260,
-          },
-          {
-            title: "🛠️ Essential Service Repair",
-            description:
-              "Urgent home service repair was needed today. Sudden bills can break weak budgets.",
-            cost: 220,
-          },
-          {
-            title: "⚠️ Safety Repair Expense",
-            description:
-              "A safety-related repair had to be paid now. Delaying could cause bigger losses.",
-            cost: 320,
-          },
-        ];
-
-        const scenarioIndex = state.player.currentDay % emergencyScenarios.length;
-        const scenario = emergencyScenarios[scenarioIndex];
-        const settlement = settleEmergencyCost(
-          state.player.wallet,
-          state.savings.balance,
-          scenario.cost,
-        );
-
-        const emergency: StormEmergency = {
-          title: scenario.title,
-          description: scenario.description,
-          cost: scenario.cost,
-          fromWallet: settlement.fromWallet,
-          fromSavings: settlement.fromSavings,
-          deficit: settlement.deficit,
-        };
-
-        set({
-          currentWeather: event,
-          weatherIntensity: 100,
-          activeStormEmergency: emergency,
-          showStormEmergency: true,
-          player: {
-            ...state.player,
-            wallet: settlement.wallet,
-          },
-          savings: {
-            ...state.savings,
-            balance: settlement.savingsBalance,
-          },
-          ...getGameOverPatch(state, settlement.wallet, settlement.savingsBalance),
-        });
-      },
-
-      // Clear weather event
-      clearWeatherEvent: () => {
-        set({
-          currentWeather: "none",
-          weatherIntensity: 0,
-          activeStormEmergency: null,
-          showStormEmergency: false,
-        });
-      },
-
-      // Pay weather event charge to end weather early
-      payWeatherCharge: () => {
-        const state = get();
-        if (state.currentWeather === "none") return;
-        if (state.currentWeather !== "rain") return;
-
-        const weatherChargeMap: Record<WeatherEvent, number> = {
-          rain: GAME_CONFIG.WEATHER_RAIN_CLEAR_COST,
-          drought: GAME_CONFIG.WEATHER_DROUGHT_CLEAR_COST,
-          storm: GAME_CONFIG.WEATHER_STORM_CLEAR_COST,
-          none: 0,
-        };
-
-        const charge = weatherChargeMap[state.currentWeather];
-        const newWallet = state.player.wallet - charge;
-
-        const lesson: DailyLesson = {
-          day: state.player.currentDay,
-          title: `Weather cleared for ₹${charge}`,
-          content: `You paid ₹${charge} to clear rain early. Keep enough cash and savings so small shocks don't affect your progress.`,
-          tip: `Use savings and emergency planning before spending on non-essentials.`,
-          basedOn: ["weather_event"],
-        };
-
-        set({
-          player: {
-            ...state.player,
-            wallet: newWallet,
-          },
-          currentWeather: "none",
-          weatherIntensity: 0,
-          activeStormEmergency: null,
-          showStormEmergency: false,
-          lessons: [...state.lessons, lesson],
-          showLesson: false,
-          currentLesson: null,
-          ...getGameOverPatch(state, newWallet, state.savings.balance),
-        });
-      },
-    }),
+    };
+    },
     {
       name: "growtopia-game-storage",
     },
   ),
 );
+// Game state management with Zustand
+

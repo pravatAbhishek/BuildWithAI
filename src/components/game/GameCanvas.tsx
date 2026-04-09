@@ -65,6 +65,8 @@ export function GameCanvas() {
     savings,
     currentScreen,
     currentDay,
+    currentPhase,
+    phaseUnlockModal,
     playerLevel,
     leaderboard,
     riskMeter,
@@ -74,6 +76,8 @@ export function GameCanvas() {
     dailySummaries,
     fixedDeposits,
     sips,
+    aiReviewEnabled,
+    latestGeminiReview,
     waterTree,
     buyWater,
     buyAsset,
@@ -82,43 +86,138 @@ export function GameCanvas() {
     buildDailySummary,
     setGeminiReview,
     setReviewStatus,
+    setAiReviewEnabled,
+    awardNightExp,
+    isFeatureUnlocked,
+    dismissPhaseUnlockModal,
     clearReviewChatMessages,
     resetGame,
     showBankModal,
     activeSuddenEvent,
     showSuddenEvent,
     resolveSuddenEvent,
-    activeGameEvent,
-    activeDailyEvents,
+    currentSimpleEvent,
     handleEventChoice,
     maintenanceChargesToday,
     showMaintenancePopup,
     dismissMaintenancePopup,
     isGameOver,
     gameOverReason,
+    emergencyLoan,
+    takeEmergencyLoan,
+    repayEmergencyLoan,
   } = useGameStore();
 
-  const [phase, setPhase] = useState<Phase>("morning");
+  const [phase, setPhase] = useState<Phase>("events");
   const [shopOpen, setShopOpen] = useState(false);
   const [shopTab, setShopTab] = useState<ShopTab>("water");
   const [missionsOpen, setMissionsOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [shakeTree, setShakeTree] = useState(false);
+  const [autoWaterVisual, setAutoWaterVisual] = useState(false);
   const [coinPop, setCoinPop] = useState<number | null>(null);
   const [showSparkles, setShowSparkles] = useState(false);
   const menuBootstrappedRef = useRef(false);
   const reviewRequestedForDayRef = useRef<number | null>(null);
+
+  const savingsUnlocked = isFeatureUnlocked("savings-account");
+  const waterShopUnlocked = isFeatureUnlocked("water-usage");
+  const assetShopUnlocked = currentPhase >= 7;
+  const inventoryUnlocked = isFeatureUnlocked("inventory");
+  const leaderboardUnlocked = isFeatureUnlocked("leaderboard");
+  const riskUnlocked = isFeatureUnlocked("risk-system");
+  const loanUnlocked = isFeatureUnlocked("bank-loans");
+
+  const activityEffects = useMemo(() => {
+    const effects: Array<{
+      id: string;
+      source: string;
+      type: "buff" | "debuff" | "neutral";
+      text: string;
+    }> = [];
+
+    if (currentWeather === "rain") {
+      effects.push({
+        id: "weather-rain",
+        source: "Rain",
+        type: "neutral",
+        text: "No weather loss today.",
+      });
+    }
+    if (currentWeather === "drought") {
+      effects.push({
+        id: "weather-drought",
+        source: "Drought",
+        type: "debuff",
+        text: "Earnings are reduced by 60%.",
+      });
+    }
+    if (currentWeather === "storm") {
+      effects.push({
+        id: "weather-storm",
+        source: "Storm",
+        type: "debuff",
+        text: `Immediate emergency loss ₹${GAME_CONFIG.WEATHER_STORM_EMERGENCY_LOSS}.`,
+      });
+    }
+
+    if (emergencyLoan) {
+      const days = Math.max(0, currentDay - emergencyLoan.startDay);
+      const outstanding = Math.floor(
+        emergencyLoan.principal * (1 + emergencyLoan.dailyInterestRate * days) - emergencyLoan.totalPaid,
+      );
+      effects.push({
+        id: "loan",
+        source: "Emergency Loan",
+        type: "debuff",
+        text: `Outstanding ₹${Math.max(0, outstanding)} at ${Math.round(
+          emergencyLoan.dailyInterestRate * 100,
+        )}% daily interest.`,
+      });
+    }
+
+    for (const asset of ownedAssets) {
+      if (asset.type === "appreciating") {
+        const pct = Math.round((asset.appreciationRate || 0) * 100);
+        effects.push({
+          id: asset.id,
+          source: asset.name,
+          type: "buff",
+          text: `Long-term growth effect around +${pct}%.`,
+        });
+        continue;
+      }
+
+      const interval = asset.maintenanceInterval || GAME_CONFIG.DEPRECIATING_EFFECT_DECAY_INTERVAL_DAYS;
+      const cycles = Math.floor(Math.max(0, currentDay - asset.purchaseDay) / Math.max(1, interval));
+      const base = Math.round(((asset.boostMultiplier || 1) - 1) * 100);
+      const adjusted = base - cycles * GAME_CONFIG.DEPRECIATING_EFFECT_DECAY_PERCENT;
+      effects.push({
+        id: asset.id,
+        source: asset.name,
+        type: adjusted > 0 ? "buff" : "debuff",
+        text:
+          adjusted > 0
+            ? `Current earning boost +${adjusted}% (decays every ${interval} days).`
+            : `Current earning drag ${adjusted}% (aged depreciating asset).`,
+      });
+    }
+
+    return effects.slice(0, 10);
+  }, [currentWeather, currentDay, emergencyLoan, ownedAssets]);
 
   const wateringsLeft = Math.max(0, 3 - tree.timesWateredToday);
   const isModalBlockingMorningFlow =
     shopOpen ||
     missionsOpen ||
     inventoryOpen ||
+    leaderboardOpen ||
     showBankModal ||
     showSuddenEvent ||
     showMaintenancePopup;
   const suppressWeatherUi =
-    phase !== "morning" || isModalBlockingMorningFlow || Boolean(activeGameEvent) || isGameOver;
+    phase !== "morning" || isModalBlockingMorningFlow || Boolean(currentSimpleEvent) || isGameOver;
   const closeBankPanel = () => {
     useGameStore.setState({ showBankModal: false });
   };
@@ -126,10 +225,15 @@ export function GameCanvas() {
     setShopOpen(false);
     setMissionsOpen(false);
     setInventoryOpen(false);
+    setLeaderboardOpen(false);
     closeBankPanel();
   };
   const openMorningPanel = (panel: "shop" | "missions" | "inventory" | "bank") => {
     if (phase !== "morning" || showSuddenEvent || isGameOver || currentScreen !== "play") return;
+
+    if (panel === "shop" && !waterShopUnlocked) return;
+    if (panel === "inventory" && !inventoryUnlocked) return;
+    if (panel === "bank" && !savingsUnlocked) return;
 
     closeMorningPanels();
 
@@ -156,6 +260,12 @@ export function GameCanvas() {
     phase === "morning" &&
     !isModalBlockingMorningFlow &&
     !isGameOver;
+
+  useEffect(() => {
+    if (!assetShopUnlocked && shopTab !== "water") {
+      setShopTab("water");
+    }
+  }, [assetShopUnlocked, shopTab]);
 
   const bgClass = useMemo(() => {
     if (phase === "morning") return "from-sky-400 via-cyan-300 to-emerald-300";
@@ -185,39 +295,23 @@ export function GameCanvas() {
   }, [currentScreen]);
 
   useEffect(() => {
-    if (
-      currentScreen !== "play" ||
-      phase !== "morning" ||
-      isGameOver ||
-      isModalBlockingMorningFlow
-    ) {
-      return;
-    }
-
-    const timeout = window.setTimeout(
-      () => {
-        setShopOpen(false);
-        setMissionsOpen(false);
-        setInventoryOpen(false);
-        useGameStore.setState({ showBankModal: false });
-        setPhase("events");
-      },
-      GAME_CONFIG.MORNING_PHASE_DURATION_MS,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [
-    currentScreen,
-    phase,
-    isGameOver,
-    isModalBlockingMorningFlow,
-  ]);
+    if (currentScreen !== "play" || phase !== "morning") return;
+    setAutoWaterVisual(true);
+    const timer = window.setTimeout(() => setAutoWaterVisual(false), 1400);
+    return () => window.clearTimeout(timer);
+  }, [currentScreen, phase, currentDay]);
 
   useEffect(() => {
     if (currentScreen !== "play" || phase !== "night" || isGameOver) return;
+
+    const summary = buildDailySummary();
+    if (!aiReviewEnabled) {
+      setReviewStatus("idle", null);
+      return;
+    }
     if (reviewRequestedForDayRef.current === currentDay) return;
 
     reviewRequestedForDayRef.current = currentDay;
-    const summary = buildDailySummary();
     setReviewStatus("loading", null);
     clearReviewChatMessages();
 
@@ -234,6 +328,8 @@ export function GameCanvas() {
           review?: {
             day: number;
             summary: string;
+            goodThings?: string[];
+            improvements?: string[];
             exp: number;
             suggestedQuestions: string[];
             model?: string;
@@ -258,6 +354,7 @@ export function GameCanvas() {
     phase,
     isGameOver,
     currentDay,
+    aiReviewEnabled,
     buildDailySummary,
     clearReviewChatMessages,
     setGeminiReview,
@@ -266,65 +363,80 @@ export function GameCanvas() {
 
   useEffect(() => {
     if (currentScreen !== "play" || phase !== "events" || isGameOver) return;
-    if (!activeGameEvent && activeDailyEvents.length === 0) {
+    if (!currentSimpleEvent) {
       const timeout = window.setTimeout(() => {
         setShopOpen(false);
         setMissionsOpen(false);
         setInventoryOpen(false);
         useGameStore.setState({ showBankModal: false });
-        setPhase("evening");
-      }, 1000);
+        setPhase("morning");
+      }, 900);
       return () => window.clearTimeout(timeout);
     }
-  }, [currentScreen, phase, activeGameEvent, activeDailyEvents.length, isGameOver]);
+  }, [currentScreen, phase, currentSimpleEvent, isGameOver]);
 
   const missions = useMemo(
-    () => [
-      {
-        id: "emergency-fund",
-        title: "Emergency Fund Builder",
-        description: "Keep ₹500 in savings.",
-        progress: Math.min(savings.balance, 500),
-        target: 500,
-        unit: "₹",
-      },
-      {
-        id: "first-fd",
-        title: "Start a Fixed Deposit",
-        description: "Create at least one FD.",
-        progress: Math.min(fixedDeposits.length, 1),
-        target: 1,
-        unit: "",
-      },
-      {
-        id: "first-sip",
-        title: "Monthly SIP Discipline",
-        description: "Start a SIP for 1 or 2 months.",
-        progress: Math.min(sips.length, 1),
-        target: 1,
-        unit: "",
-      },
-      {
-        id: "long-term-investor",
-        title: "Own a Growing Asset",
-        description: "Buy at least one appreciating asset.",
-        progress: Math.min(
-          ownedAssets.filter((asset) => asset.type === "appreciating").length,
-          1,
-        ),
-        target: 1,
-        unit: "",
-      },
-      {
-        id: "net-worth",
-        title: "Net Worth ₹2000",
-        description: "Reach ₹2000 across wallet, savings, and assets.",
-        progress: Math.min(Math.max(netWorth, 0), 2000),
-        target: 2000,
-        unit: "₹",
-      },
-    ],
-    [fixedDeposits.length, netWorth, ownedAssets, savings.balance, sips.length],
+    () => {
+      const base = [
+        {
+          id: "emergency-fund",
+          title: "Emergency Fund Builder",
+          description: "Keep ₹500 in savings.",
+          progress: Math.min(savings.balance, 500),
+          target: 500,
+          unit: "₹",
+        },
+        {
+          id: "first-fd",
+          title: "Start a Fixed Deposit",
+          description: "Create at least one FD.",
+          progress: Math.min(fixedDeposits.length, 1),
+          target: 1,
+          unit: "",
+        },
+        {
+          id: "first-sip",
+          title: "Monthly SIP Discipline",
+          description: "Start a SIP for 1 or 2 months.",
+          progress: Math.min(sips.length, 1),
+          target: 1,
+          unit: "",
+        },
+        {
+          id: "long-term-investor",
+          title: "Own a Growing Asset",
+          description: "Buy at least one appreciating asset.",
+          progress: Math.min(
+            ownedAssets.filter((asset) => asset.type === "appreciating").length,
+            1,
+          ),
+          target: 1,
+          unit: "",
+        },
+        {
+          id: "net-worth",
+          title: "Net Worth ₹2000",
+          description: "Reach ₹2000 across wallet, savings, and assets.",
+          progress: Math.min(Math.max(netWorth, 0), 2000),
+          target: 2000,
+          unit: "₹",
+        },
+      ];
+
+      if (currentPhase >= 9) {
+        base.push({
+          id: "management-mode",
+          title: "Management Mode",
+          description: "Plan business cash flow and life-goal purchases.",
+          progress: 1,
+          target: 1,
+          unit: "",
+        });
+      }
+
+      return base;
+    },
+    [currentPhase, fixedDeposits.length, netWorth, ownedAssets, savings.balance, sips.length],
   );
 
   const onWater = () => {
@@ -348,12 +460,15 @@ export function GameCanvas() {
   };
 
   const onStartNewDay = () => {
+    const extraExp = aiReviewEnabled ? latestGeminiReview?.exp || 0 : 0;
+    awardNightExp(extraExp, currentDay);
     reviewRequestedForDayRef.current = null;
+    setAiReviewEnabled(false);
     setPhase("sunrise");
     window.setTimeout(() => {
       advanceDay();
       closeMorningPanels();
-      setPhase("morning");
+      setPhase("events");
     }, 1200);
   };
 
@@ -379,8 +494,16 @@ export function GameCanvas() {
           leaderboard={leaderboard}
           riskMeter={riskMeter}
           riskLevel={riskLevel}
+          showBank={savingsUnlocked}
+          showRisk={riskUnlocked}
+          showLeaderboard={leaderboardUnlocked}
           onBankClick={() => openMorningPanel("bank")}
+          onLeaderboardClick={() => setLeaderboardOpen(true)}
         />
+
+        <div className="absolute left-4 top-24 z-30 rounded-full border border-white/70 bg-white/90 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-emerald-700 shadow-lg">
+          Phase {currentPhase}
+        </div>
 
         {/* Reset Button with rotation */}
         <motion.button
@@ -389,7 +512,7 @@ export function GameCanvas() {
           onClick={() => {
             reviewRequestedForDayRef.current = null;
             closeMorningPanels();
-            setPhase("morning");
+            setPhase("events");
             resetGame();
           }}
           className="absolute top-4 right-4 z-40 w-12 h-12 rounded-full bg-gradient-to-br from-red-500 to-red-700 text-white shadow-lg flex items-center justify-center text-xl hover:shadow-red-500/50 hover:shadow-xl transition-shadow"
@@ -402,6 +525,7 @@ export function GameCanvas() {
           treeStage={tree.stage}
           treeHealth={treeHealth.value}
           shakeTree={shakeTree}
+          autoWaterVisual={autoWaterVisual}
           phase={phase}
           canWater={canWater}
           onWater={onWater}
@@ -472,17 +596,26 @@ export function GameCanvas() {
 
         {phase === "events" && (
           <EventCard
-            event={activeGameEvent}
+            event={currentSimpleEvent}
+            wallet={player.wallet}
             onChoice={(choiceId) => {
               handleEventChoice(choiceId);
+              setPhase("morning");
             }}
           />
         )}
 
+        <ActivityMonitor effects={activityEffects} />
+
         {/* Night Lesson Bubble */}
         <AnimatePresence>
           {phase === "night" && (
-            <NightLessonBubble onContinue={onStartNewDay} summary={latestSummary} />
+            <NightLessonBubble
+              onContinue={onStartNewDay}
+              summary={latestSummary}
+              reviewEnabled={aiReviewEnabled}
+              onToggleReview={setAiReviewEnabled}
+            />
           )}
         </AnimatePresence>
 
@@ -501,11 +634,14 @@ export function GameCanvas() {
                 !isGameOver &&
                 !isModalBlockingMorningFlow
               }
+              showShop={waterShopUnlocked}
+              showBank={savingsUnlocked}
+              showInventory={inventoryUnlocked}
               onShop={() => openMorningPanel("shop")}
               onEndDay={() => {
                 if (isModalBlockingMorningFlow) return;
                 closeMorningPanels();
-                setPhase("events");
+                setPhase("evening");
               }}
               onBank={() => openMorningPanel("bank")}
               onMissions={() => openMorningPanel("missions")}
@@ -523,6 +659,7 @@ export function GameCanvas() {
               marketAssets={marketAssets}
               wallet={player.wallet}
               ownedAssets={ownedAssets}
+              assetsUnlocked={assetShopUnlocked}
               onBuy={buyAsset}
               onBuyWater={buyWater}
               onClose={() => setShopOpen(false)}
@@ -533,7 +670,21 @@ export function GameCanvas() {
         {/* Quick Bank Access Modal */}
         <AnimatePresence>
           {showBankModal && phase === "morning" && !showSuddenEvent && !isGameOver && (
-            <QuickBankModal onClose={closeBankPanel} />
+            <QuickBankModal
+              onClose={closeBankPanel}
+              loanUnlocked={loanUnlocked}
+              emergencyLoan={emergencyLoan}
+              currentDay={currentDay}
+              onTakeLoan={(amount) => {
+                const granted = takeEmergencyLoan(amount);
+                if (granted) {
+                  closeBankPanel();
+                }
+              }}
+              onRepayLoan={() => {
+                repayEmergencyLoan();
+              }}
+            />
           )}
         </AnimatePresence>
 
@@ -583,12 +734,40 @@ export function GameCanvas() {
             <GameOverOverlay
               reason={gameOverReason}
               netWorth={netWorth}
+              canTakeLoan={loanUnlocked && !emergencyLoan}
+              onTakeLoan={(amount) => {
+                const granted = takeEmergencyLoan(amount);
+                if (granted) {
+                  setPhase("morning");
+                }
+              }}
               onRestart={() => {
                 reviewRequestedForDayRef.current = null;
                 closeMorningPanels();
-                setPhase("morning");
+                setPhase("events");
                 resetGame();
               }}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {leaderboardOpen && leaderboardUnlocked && (
+            <LeaderboardModal
+              entries={leaderboard}
+              onClose={() => setLeaderboardOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {phaseUnlockModal && (
+            <PhaseUnlockModal
+              fromPhase={phaseUnlockModal.fromPhase}
+              toPhase={phaseUnlockModal.toPhase}
+              learned={phaseUnlockModal.learned}
+              unlockedFeatures={phaseUnlockModal.unlockedFeatures}
+              onContinue={dismissPhaseUnlockModal}
             />
           )}
         </AnimatePresence>
@@ -608,7 +787,11 @@ function TopHUD({
   leaderboard,
   riskMeter,
   riskLevel,
+  showBank,
+  showRisk,
+  showLeaderboard,
   onBankClick,
+  onLeaderboardClick,
 }: {
   day: number;
   wallet: number;
@@ -619,7 +802,11 @@ function TopHUD({
   leaderboard: Array<{ id: string; name: string; level: number; score: number; trend: "up" | "down" | "steady" }>;
   riskMeter: number;
   riskLevel: "low" | "medium" | "high";
+  showBank: boolean;
+  showRisk: boolean;
+  showLeaderboard: boolean;
   onBankClick: () => void;
+  onLeaderboardClick: () => void;
 }) {
   const topTwo = [...leaderboard].sort((a, b) => b.score - a.score).slice(0, 2);
 
@@ -669,16 +856,17 @@ function TopHUD({
           <span className="text-xl font-black text-indigo-700">{wateringsLeft} left</span>
         </motion.div>
 
-        {/* Savings Quick Access */}
-        <motion.button
-          onClick={onBankClick}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-br from-green-100 to-emerald-200 hover:from-green-200 hover:to-emerald-300 transition-colors"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <span className="text-2xl">🏦</span>
-          <span className="text-xl font-black text-green-700">₹{savings}</span>
-        </motion.button>
+        {showBank && (
+          <motion.button
+            onClick={onBankClick}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-br from-green-100 to-emerald-200 hover:from-green-200 hover:to-emerald-300 transition-colors"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <span className="text-2xl">🏦</span>
+            <span className="text-xl font-black text-green-700">₹{savings}</span>
+          </motion.button>
+        )}
         <motion.div
           className="rounded-xl bg-violet-100 px-3 py-2 text-center"
           animate={{ scale: [1, 1.04, 1] }}
@@ -687,25 +875,32 @@ function TopHUD({
           <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600">Level</p>
           <p className="text-xl font-black text-violet-800">{playerLevel}</p>
         </motion.div>
-        <motion.div className="min-w-40 rounded-xl bg-slate-100 px-3 py-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Risk {riskLevel}</p>
-          <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
-            <div
-              className={`h-full rounded-full ${
-                riskMeter > 65 ? "bg-red-500" : riskMeter > 35 ? "bg-amber-500" : "bg-emerald-500"
-              }`}
-              style={{ width: `${Math.min(100, riskMeter)}%` }}
-            />
-          </div>
-        </motion.div>
-        <div className="min-w-40 rounded-xl bg-white px-3 py-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-600">Leaderboard</p>
-          {topTwo.map((entry) => (
-            <p key={entry.id} className="text-xs font-semibold text-slate-700">
-              {entry.name} L{entry.level}
-            </p>
-          ))}
-        </div>
+        {showRisk && (
+          <motion.div className="min-w-40 rounded-xl bg-slate-100 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Risk {riskLevel}</p>
+            <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className={`h-full rounded-full ${
+                  riskMeter > 65 ? "bg-red-500" : riskMeter > 35 ? "bg-amber-500" : "bg-emerald-500"
+                }`}
+                style={{ width: `${Math.min(100, riskMeter)}%` }}
+              />
+            </div>
+          </motion.div>
+        )}
+        {showLeaderboard && (
+          <button
+            onClick={onLeaderboardClick}
+            className="min-w-40 rounded-xl border border-sky-200 bg-white px-3 py-2 text-left transition hover:bg-sky-50"
+          >
+            <p className="text-[10px] font-bold uppercase tracking-wider text-sky-600">Leaderboard</p>
+            {topTwo.map((entry) => (
+              <p key={entry.id} className="text-xs font-semibold text-slate-700">
+                {entry.name} L{entry.level}
+              </p>
+            ))}
+          </button>
+        )}
       </div>
     </motion.div>
   );
@@ -717,6 +912,7 @@ function SceneTree({
   treeHealth,
   phase,
   shakeTree,
+  autoWaterVisual,
   canWater,
   onWater,
 }: {
@@ -724,6 +920,7 @@ function SceneTree({
   treeHealth: number;
   phase: Phase;
   shakeTree: boolean;
+  autoWaterVisual: boolean;
   canWater: boolean;
   onWater: () => void;
 }) {
@@ -760,6 +957,20 @@ function SceneTree({
       >
         {treeEmoji}
       </motion.div>
+
+      <AnimatePresence>
+        {phase === "morning" && autoWaterVisual && (
+          <motion.div
+            className="absolute bottom-[44%] left-1/2 z-30 -translate-x-1/2 text-4xl"
+            initial={{ y: -60, opacity: 0 }}
+            animate={{ y: 10, opacity: [0, 1, 0] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.1, ease: "easeOut" }}
+          >
+            💧
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Water Button */}
       <AnimatePresence>
@@ -807,6 +1018,9 @@ function getTreeEmoji(stage: "seed" | "sprout" | "small" | "medium" | "large" | 
 // Enhanced Bottom Actions
 function BottomActions({
   canEndDay,
+  showShop,
+  showBank,
+  showInventory,
   onShop,
   onEndDay,
   onBank,
@@ -814,6 +1028,9 @@ function BottomActions({
   onInventory,
 }: {
   canEndDay: boolean;
+  showShop: boolean;
+  showBank: boolean;
+  showInventory: boolean;
   onShop: () => void;
   onEndDay: () => void;
   onBank: () => void;
@@ -827,42 +1044,52 @@ function BottomActions({
       exit={{ y: 50, opacity: 0 }}
       className="absolute bottom-6 left-0 right-0 z-40 px-4"
     >
-      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-3 md:grid-cols-5">
-        <motion.button
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={onShop}
-          className="rounded-2xl bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-700 px-4 py-4 text-lg font-black text-white shadow-xl hover:shadow-purple-500/40 transition-shadow"
-          style={{
-            boxShadow: "0 10px 30px rgba(139, 92, 246, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
-          }}
-        >
-          <span className="flex items-center justify-center gap-3">
-            <span className="text-2xl">🛒</span>
-            <span>Shop</span>
-          </span>
-        </motion.button>
+      <motion.div layout className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-3">
+        {showShop && (
+          <motion.button
+            layout
+            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+            whileHover={{ scale: 1.05, y: -3 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onShop}
+            className="w-[min(44vw,190px)] rounded-2xl bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-700 px-4 py-4 text-lg font-black text-white shadow-xl transition-shadow hover:shadow-purple-500/40 sm:w-44"
+            style={{
+              boxShadow: "0 10px 30px rgba(139, 92, 246, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
+            }}
+          >
+            <span className="flex items-center justify-center gap-3">
+              <span className="text-2xl">🛒</span>
+              <span>Shop</span>
+            </span>
+          </motion.button>
+        )}
+
+        {showBank && (
+          <motion.button
+            layout
+            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+            whileHover={{ scale: 1.05, y: -3 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onBank}
+            className="w-[min(44vw,190px)] rounded-2xl bg-gradient-to-br from-green-500 via-emerald-500 to-teal-600 px-4 py-4 text-lg font-black text-white shadow-xl transition-shadow hover:shadow-green-500/40 sm:w-44"
+            style={{
+              boxShadow: "0 10px 30px rgba(16, 185, 129, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
+            }}
+          >
+            <span className="flex items-center justify-center gap-3">
+              <span className="text-2xl">🏦</span>
+              <span>Bank</span>
+            </span>
+          </motion.button>
+        )}
 
         <motion.button
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={onBank}
-          className="rounded-2xl bg-gradient-to-br from-green-500 via-emerald-500 to-teal-600 px-4 py-4 text-lg font-black text-white shadow-xl hover:shadow-green-500/40 transition-shadow"
-          style={{
-            boxShadow: "0 10px 30px rgba(16, 185, 129, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
-          }}
-        >
-          <span className="flex items-center justify-center gap-3">
-            <span className="text-2xl">🏦</span>
-            <span>Bank</span>
-          </span>
-        </motion.button>
-
-        <motion.button
+          layout
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
           whileHover={{ scale: 1.05, y: -3 }}
           whileTap={{ scale: 0.95 }}
           onClick={onMissions}
-          className="rounded-2xl bg-gradient-to-br from-cyan-500 via-sky-500 to-blue-600 px-4 py-4 text-lg font-black text-white shadow-xl hover:shadow-sky-500/40 transition-shadow"
+          className="w-[min(44vw,190px)] rounded-2xl bg-gradient-to-br from-cyan-500 via-sky-500 to-blue-600 px-4 py-4 text-lg font-black text-white shadow-xl transition-shadow hover:shadow-sky-500/40 sm:w-44"
           style={{
             boxShadow: "0 10px 30px rgba(14, 165, 233, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
           }}
@@ -873,27 +1100,33 @@ function BottomActions({
           </span>
         </motion.button>
 
-        <motion.button
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={onInventory}
-          className="rounded-2xl bg-gradient-to-br from-fuchsia-500 via-pink-500 to-rose-600 px-4 py-4 text-lg font-black text-white shadow-xl hover:shadow-pink-500/40 transition-shadow"
-          style={{
-            boxShadow: "0 10px 30px rgba(236, 72, 153, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
-          }}
-        >
-          <span className="flex items-center justify-center gap-3">
-            <span className="text-2xl">🧾</span>
-            <span>Inventory</span>
-          </span>
-        </motion.button>
+        {showInventory && (
+          <motion.button
+            layout
+            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+            whileHover={{ scale: 1.05, y: -3 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onInventory}
+            className="w-[min(44vw,190px)] rounded-2xl bg-gradient-to-br from-fuchsia-500 via-pink-500 to-rose-600 px-4 py-4 text-lg font-black text-white shadow-xl transition-shadow hover:shadow-pink-500/40 sm:w-44"
+            style={{
+              boxShadow: "0 10px 30px rgba(236, 72, 153, 0.3), inset 0 -3px 0 rgba(0,0,0,0.15)",
+            }}
+          >
+            <span className="flex items-center justify-center gap-3">
+              <span className="text-2xl">🧾</span>
+              <span>Inventory</span>
+            </span>
+          </motion.button>
+        )}
 
         <motion.button
+          layout
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
           whileHover={canEndDay ? { scale: 1.05, y: -3 } : {}}
           whileTap={canEndDay ? { scale: 0.95 } : {}}
           onClick={onEndDay}
           disabled={!canEndDay}
-          className={`rounded-2xl px-4 py-4 text-lg font-black text-white shadow-xl transition-all ${
+          className={`w-[min(44vw,190px)] rounded-2xl px-4 py-4 text-lg font-black text-white shadow-xl transition-all sm:w-44 ${
             canEndDay 
               ? "bg-gradient-to-br from-amber-400 via-orange-500 to-red-500 hover:shadow-orange-500/40" 
               : "bg-gradient-to-br from-slate-400 to-slate-500 opacity-60 cursor-not-allowed"
@@ -907,7 +1140,7 @@ function BottomActions({
             <span>End Day</span>
           </span>
         </motion.button>
-      </div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -919,6 +1152,7 @@ function ShopModal({
   marketAssets,
   wallet,
   ownedAssets,
+  assetsUnlocked,
   onBuy,
   onBuyWater,
   onClose,
@@ -928,13 +1162,21 @@ function ShopModal({
   marketAssets: MarketAsset[];
   wallet: number;
   ownedAssets: { name: string; type: AssetType }[];
+  assetsUnlocked: boolean;
   onBuy: (assetId: string) => void;
   onBuyWater: (units: number) => void;
   onClose: () => void;
 }) {
-  const filteredAssets = marketAssets.filter((a) => a.type === tab);
+  const filteredAssets = marketAssets.filter((asset) => asset.type === tab);
   const { ownedAssets: assets } = useGameStore();
   const waterOptions = getWaterBundleOptions(assets);
+  const visibleTabs: Array<{ id: ShopTab; label: string }> = assetsUnlocked
+    ? [
+        { id: "water", label: "💧 Water" },
+        { id: "depreciating", label: "⚡ Fast" },
+        { id: "appreciating", label: "📈 Long" },
+      ]
+    : [{ id: "water", label: "💧 Water" }];
   const tabButtonStyles: Record<
     "water" | "depreciating" | "appreciating",
     { active: string; inactive: string }
@@ -995,143 +1237,129 @@ function ShopModal({
           <span className="text-3xl font-black text-yellow-800">🪙 ₹{wallet}</span>
         </motion.div>
 
-        {/* Tab Buttons */}
-        <div className="mb-4 grid grid-cols-3 gap-2">
-          {[
-            { id: "water" as ShopTab, label: "💧 Water" },
-            { id: "depreciating" as ShopTab, label: "⚡ Fast" },
-            { id: "appreciating" as ShopTab, label: "📈 Long" },
-          ].map((t, i) => (
+        <div className={`mb-4 grid gap-2 ${assetsUnlocked ? "grid-cols-3" : "grid-cols-1"}`}>
+          {visibleTabs.map((currentTab, index) => (
             <motion.button
-              key={t.id}
+              key={currentTab.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              onClick={() => setTab(t.id)}
+              transition={{ delay: index * 0.08 }}
+              onClick={() => setTab(currentTab.id)}
               className={`rounded-xl px-4 py-3 text-lg font-bold transition-all ${
-                tab === t.id
-                  ? tabButtonStyles[t.id].active
-                  : tabButtonStyles[t.id].inactive
+                tab === currentTab.id
+                  ? tabButtonStyles[currentTab.id].active
+                  : tabButtonStyles[currentTab.id].inactive
               }`}
-              style={tab === t.id ? { 
-                boxShadow: `0 4px 15px rgba(0,0,0,0.2)` 
-              } : {}}
+              style={tab === currentTab.id ? { boxShadow: "0 4px 15px rgba(0,0,0,0.2)" } : {}}
             >
-              {t.label}
+              {currentTab.label}
             </motion.button>
           ))}
         </div>
 
-        {/* Tab Description */}
         <motion.div
-          key={tab}
+          key={assetsUnlocked ? tab : "water-only-shop"}
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className={`mb-4 rounded-xl p-3 text-center text-sm font-medium ${
-            tab === "water" 
-              ? "bg-sky-50 text-sky-800" 
-              : tab === "depreciating"
-                ? "bg-orange-50 text-orange-800"
-                : "bg-green-50 text-green-800"
-          }`}
+          className="mb-4 rounded-xl bg-sky-50 p-3 text-center text-sm font-medium text-sky-800"
         >
-          {tab === "water" && "Buy water drops to water your plant and earn coins!"}
-          {tab === "depreciating" && "Quick boost assets - high returns now, but value decreases over time"}
-          {tab === "appreciating" && "Long-term assets - value grows exponentially every 15 days"}
+          {!assetsUnlocked
+            ? "Buy water drops to water your tree and earn coins. Fast and Long-term unlock at Phase 7."
+            : tab === "water"
+              ? "Buy water drops to water your tree and earn coins."
+              : tab === "depreciating"
+                ? "Fast assets give quick gains, but may cause costly repairs later."
+                : "Long-term assets are slower now, stronger over time."}
         </motion.div>
 
         {/* Content */}
         <div className="max-h-[40vh] space-y-3 overflow-y-auto pr-1">
-          {tab === "water" ? (
-            // Water bundles
-            waterOptions.map((option, i) => (
-              <motion.div
-                key={option.units}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="rounded-2xl border-2 border-sky-200 bg-gradient-to-r from-sky-50 to-blue-50 p-4 hover:border-sky-300 hover:shadow-lg transition-all"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-4xl">💧</span>
-                    <div>
-                      <div className="text-xl font-black text-sky-800">{option.label}</div>
-                      <div className="text-sm text-sky-600">
-                        {option.units > 1 && `Save ₹${option.units * 100 - option.cost}!`}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-black text-yellow-700">₹{option.cost}</div>
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      disabled={wallet < option.cost}
-                      onClick={() => onBuyWater(option.units)}
-                      className={`mt-2 px-6 py-2 rounded-xl font-bold text-white transition-all ${
-                        wallet >= option.cost
-                          ? "bg-gradient-to-r from-sky-500 to-blue-600 hover:shadow-lg"
-                          : "bg-slate-400 cursor-not-allowed"
-                      }`}
-                    >
-                      Buy
-                    </motion.button>
-                  </div>
-                </div>
-              </motion.div>
-            ))
-          ) : (
-            // Assets
-            filteredAssets.map((asset, i) => {
-              const owned = ownedAssets.some(
-                (a) => a.name === asset.name && a.type === asset.type,
-              );
-              const canAfford = wallet >= asset.currentPrice && !owned;
-
-              return (
+          {tab === "water"
+            ? waterOptions.map((option, i) => (
                 <motion.div
-                  key={asset.id}
+                  key={option.units}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.1 }}
-                  whileHover={canAfford ? { scale: 1.02, x: 5 } : {}}
-                  className={`rounded-2xl border-2 p-4 transition-all ${
-                    owned
-                      ? "border-green-300 bg-green-50"
-                      : canAfford
-                        ? "border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50 hover:border-indigo-300 hover:shadow-lg"
-                        : "border-gray-200 bg-gray-50 opacity-70"
-                  }`}
+                  className="rounded-2xl border-2 border-sky-200 bg-gradient-to-r from-sky-50 to-blue-50 p-4 transition-all hover:border-sky-300 hover:shadow-lg"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="text-2xl font-black text-slate-800">{asset.name}</div>
-                      <div className="mt-1 text-sm text-slate-600">{asset.description}</div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-4xl">💧</span>
+                      <div>
+                        <div className="text-xl font-black text-sky-800">{option.label}</div>
+                        <div className="text-sm text-sky-600">
+                          {option.units > 1 && `Save ₹${option.units * 100 - option.cost}!`}
+                        </div>
+                      </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-black text-yellow-700">₹{asset.currentPrice}</div>
+                      <div className="text-2xl font-black text-yellow-700">₹{option.cost}</div>
                       <motion.button
-                        whileHover={canAfford ? { scale: 1.05 } : {}}
-                        whileTap={canAfford ? { scale: 0.95 } : {}}
-                        disabled={!canAfford}
-                        onClick={() => onBuy(asset.id)}
-                        className={`mt-2 px-6 py-2 rounded-xl font-bold text-white transition-all ${
-                          owned
-                            ? "bg-green-500"
-                            : canAfford
-                              ? "bg-gradient-to-r from-indigo-500 to-purple-600 hover:shadow-lg"
-                              : "bg-slate-400 cursor-not-allowed"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        disabled={wallet < option.cost}
+                        onClick={() => onBuyWater(option.units)}
+                        className={`mt-2 rounded-xl px-6 py-2 font-bold text-white transition-all ${
+                          wallet >= option.cost
+                            ? "bg-gradient-to-r from-sky-500 to-blue-600 hover:shadow-lg"
+                            : "cursor-not-allowed bg-slate-400"
                         }`}
                       >
-                        {owned ? "✅ Owned" : canAfford ? "Buy" : "Can't Afford"}
+                        Buy
                       </motion.button>
                     </div>
                   </div>
                 </motion.div>
-              );
-            })
-          )}
+              ))
+            : filteredAssets.map((asset, i) => {
+                const owned = ownedAssets.some(
+                  (ownedItem) => ownedItem.name === asset.name && ownedItem.type === asset.type,
+                );
+                const canAfford = wallet >= asset.currentPrice && !owned;
+
+                return (
+                  <motion.div
+                    key={asset.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                    whileHover={canAfford ? { scale: 1.02, x: 5 } : {}}
+                    className={`rounded-2xl border-2 p-4 transition-all ${
+                      owned
+                        ? "border-green-300 bg-green-50"
+                        : canAfford
+                          ? "border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50 hover:border-indigo-300 hover:shadow-lg"
+                          : "border-gray-200 bg-gray-50 opacity-70"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="text-2xl font-black text-slate-800">{asset.name}</div>
+                        <div className="mt-1 text-sm text-slate-600">{asset.description}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-black text-yellow-700">₹{asset.currentPrice}</div>
+                        <motion.button
+                          whileHover={canAfford ? { scale: 1.05 } : {}}
+                          whileTap={canAfford ? { scale: 0.95 } : {}}
+                          disabled={!canAfford}
+                          onClick={() => onBuy(asset.id)}
+                          className={`mt-2 rounded-xl px-6 py-2 font-bold text-white transition-all ${
+                            owned
+                              ? "bg-green-500"
+                              : canAfford
+                                ? "bg-gradient-to-r from-indigo-500 to-purple-600 hover:shadow-lg"
+                                : "bg-slate-400 cursor-not-allowed"
+                          }`}
+                        >
+                          {owned ? "✅ Owned" : canAfford ? "Buy" : "Can't Afford"}
+                        </motion.button>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
         </div>
       </motion.div>
     </motion.div>
@@ -1207,11 +1435,23 @@ function BankingInterfaceModal({
 function NightLessonBubble({
   summary,
   onContinue,
+  reviewEnabled,
+  onToggleReview,
 }: {
   summary: DailySummary | null;
   onContinue: () => void;
+  reviewEnabled: boolean;
+  onToggleReview: (enabled: boolean) => void;
 }) {
-  return <AIDayReview isOpen summary={summary} onContinue={onContinue} />;
+  return (
+    <AIDayReview
+      isOpen
+      summary={summary}
+      onContinue={onContinue}
+      reviewEnabled={reviewEnabled}
+      onToggleReview={onToggleReview}
+    />
+  );
 }
 
 // Spectacular Sunrise Overlay
@@ -1284,13 +1524,39 @@ function SunriseOverlay() {
 }
 
 // Quick Bank Modal (accessible during morning)
-function QuickBankModal({ onClose }: { onClose: () => void }) {
+function QuickBankModal({
+  onClose,
+  loanUnlocked,
+  emergencyLoan,
+  currentDay,
+  onTakeLoan,
+  onRepayLoan,
+}: {
+  onClose: () => void;
+  loanUnlocked: boolean;
+  emergencyLoan: { principal: number; startDay: number; dailyInterestRate: number; totalPaid: number } | null;
+  currentDay: number;
+  onTakeLoan: (amount: number) => void;
+  onRepayLoan: () => void;
+}) {
   const { player, savings, depositToSavings, withdrawFromSavings } = useGameStore();
   const [amount, setAmount] = useState(50);
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
 
   const canDeposit = mode === "deposit" && player.wallet >= amount && amount > 0;
   const canWithdraw = mode === "withdraw" && savings.balance >= amount && amount > 0;
+  const netWorth = player.wallet + savings.balance;
+  const isEmergency = player.wallet <= GAME_CONFIG.EMERGENCY_LOAN_DANGER_WALLET || netWorth <= 120;
+  const loanDays = emergencyLoan ? Math.max(0, currentDay - emergencyLoan.startDay) : 0;
+  const loanOutstanding = emergencyLoan
+    ? Math.max(
+        0,
+        Math.floor(
+          emergencyLoan.principal * (1 + emergencyLoan.dailyInterestRate * loanDays) -
+            emergencyLoan.totalPaid,
+        ),
+      )
+    : 0;
 
   const handleAction = () => {
     if (mode === "deposit" && canDeposit) {
@@ -1342,6 +1608,67 @@ function QuickBankModal({ onClose }: { onClose: () => void }) {
         <div className="text-center text-sm text-green-600 mb-4">
           💡 Savings earn 1% interest daily!
         </div>
+
+        {loanUnlocked && (
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-700">
+              Emergency Loan
+            </p>
+
+            {!emergencyLoan && (
+              <>
+                <p className="mt-1 text-xs text-amber-700">
+                  Available only during cash emergency. Loan interest increases with repayment time.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  {GAME_CONFIG.EMERGENCY_LOAN_OPTIONS.map((option) => (
+                    <button
+                      key={option}
+                      disabled={!isEmergency}
+                      onClick={() => onTakeLoan(option)}
+                      className={`flex-1 rounded-xl px-2 py-2 text-xs font-black transition ${
+                        isEmergency
+                          ? "bg-amber-500 text-white hover:bg-amber-600"
+                          : "cursor-not-allowed bg-slate-200 text-slate-500"
+                      }`}
+                    >
+                      Loan ₹{option}
+                    </button>
+                  ))}
+                </div>
+                {!isEmergency && (
+                  <p className="mt-2 text-[11px] text-slate-500">
+                    Loan buttons unlock when wallet is critically low.
+                  </p>
+                )}
+              </>
+            )}
+
+            {emergencyLoan && (
+              <>
+                <p className="mt-1 text-xs text-amber-700">
+                  Active loan ₹{emergencyLoan.principal} | Outstanding ₹{loanOutstanding} | Days: {loanDays}
+                </p>
+                <button
+                  onClick={onRepayLoan}
+                  disabled={player.wallet < loanOutstanding}
+                  className={`mt-2 w-full rounded-xl px-3 py-2 text-sm font-black transition ${
+                    player.wallet >= loanOutstanding
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                      : "cursor-not-allowed bg-slate-200 text-slate-500"
+                  }`}
+                >
+                  {player.wallet >= loanOutstanding
+                    ? `Repay Full Loan ₹${loanOutstanding}`
+                    : `Need ₹${loanOutstanding} to repay`}
+                </button>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  New loan is blocked until this one is fully repaid.
+                </p>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Mode Toggle */}
         <div className="flex rounded-xl overflow-hidden border border-gray-200 mb-4">
@@ -1681,13 +2008,166 @@ function MaintenancePopup({
   );
 }
 
+function ActivityMonitor({
+  effects,
+}: {
+  effects: Array<{ id: string; source: string; type: "buff" | "debuff" | "neutral"; text: string }>;
+}) {
+  return (
+    <div className="pointer-events-none absolute right-4 top-24 z-30 w-[min(92vw,290px)]">
+      <div className="rounded-2xl border border-white/60 bg-white/92 p-3 shadow-xl backdrop-blur">
+        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-600">Activity Monitor</p>
+        {effects.length === 0 ? (
+          <p className="mt-2 text-xs text-slate-500">No active buffs or debuffs right now.</p>
+        ) : (
+          <div className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1">
+            {effects.map((effect) => (
+              <div
+                key={effect.id}
+                className={`rounded-xl border px-3 py-2 text-xs ${
+                  effect.type === "buff"
+                    ? "border-emerald-200 bg-emerald-50"
+                    : effect.type === "debuff"
+                      ? "border-rose-200 bg-rose-50"
+                      : "border-slate-200 bg-slate-50"
+                }`}
+              >
+                <p className="font-black text-slate-800">{effect.source}</p>
+                <p className="mt-1 text-slate-600">{effect.text}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LeaderboardModal({
+  entries,
+  onClose,
+}: {
+  entries: Array<{ id: string; name: string; level: number; score: number; trend: "up" | "down" | "steady" }>;
+  onClose: () => void;
+}) {
+  const ranked = [...entries].sort((a, b) => b.score - a.score);
+
+  return (
+    <motion.div
+      className="absolute inset-0 z-[68] flex items-center justify-center bg-black/45 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"
+        initial={{ y: 20, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 20, scale: 0.96 }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-black text-slate-900">🏆 Leaderboard</h3>
+          <button
+            onClick={onClose}
+            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {ranked.map((entry, index) => (
+            <div
+              key={entry.id}
+              className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+            >
+              <p className="text-sm font-black text-slate-900">
+                #{index + 1} {entry.name}
+              </p>
+              <p className="text-xs font-semibold text-slate-600">
+                L{entry.level} • {entry.score}
+              </p>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function PhaseUnlockModal({
+  fromPhase,
+  toPhase,
+  learned,
+  unlockedFeatures,
+  onContinue,
+}: {
+  fromPhase: number;
+  toPhase: number;
+  learned: string[];
+  unlockedFeatures: string[];
+  onContinue: () => void;
+}) {
+  return (
+    <motion.div
+      className="absolute inset-0 z-[90] flex items-center justify-center bg-black/55 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+        initial={{ y: 20, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: 20, scale: 0.96 }}
+      >
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Phase Completed</p>
+        <h3 className="mt-2 text-2xl font-black text-slate-900">
+          Phase {fromPhase} ➜ Phase {toPhase}
+        </h3>
+
+        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">What You Learned</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-emerald-900">
+            {learned.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-sky-700">New Unlocks</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-sky-900">
+            {unlockedFeatures.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+
+        <button
+          onClick={onContinue}
+          className="mt-5 w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700"
+        >
+          Continue Journey
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function GameOverOverlay({
   reason,
   netWorth,
+  canTakeLoan,
+  onTakeLoan,
   onRestart,
 }: {
   reason: string | null;
   netWorth: number;
+  canTakeLoan: boolean;
+  onTakeLoan: (amount: 500 | 1000 | 2000) => void;
   onRestart: () => void;
 }) {
   return (
@@ -1703,17 +2183,44 @@ function GameOverOverlay({
         animate={{ y: 0, scale: 1 }}
         exit={{ y: 20, scale: 0.96 }}
       >
-        <h3 className="text-3xl font-black text-red-600">Game Over</h3>
+        <motion.div
+          className="mx-auto mb-2 w-fit text-6xl"
+          animate={{ y: [0, 4, 0], rotate: [0, -2, 2, 0] }}
+          transition={{ duration: 1.8, repeat: Infinity }}
+        >
+          🌳💧
+        </motion.div>
+        <h3 className="text-3xl font-black text-red-600">Bankrupt!</h3>
         <p className="mt-3 text-sm text-slate-700">
-          {reason || "Your financial position dropped below zero."}
+          {reason || "You went bankrupt! Money management is tough, but you can try again."}
         </p>
         <p className="mt-2 font-semibold text-slate-900">Net Worth: ₹{netWorth}</p>
+
+        {canTakeLoan && (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-700">Emergency Loan Rescue</p>
+            <p className="mt-1 text-xs text-amber-700">
+              Choose one loan. Interest increases based on repayment day.
+            </p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {[500, 1000, 2000].map((amount) => (
+                <button
+                  key={amount}
+                  onClick={() => onTakeLoan(amount as 500 | 1000 | 2000)}
+                  className="rounded-xl bg-amber-500 px-2 py-2 text-xs font-black text-white hover:bg-amber-600"
+                >
+                  ₹{amount}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <button
           onClick={onRestart}
           className="mt-5 w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-green-600 px-4 py-3 text-sm font-semibold text-white hover:from-emerald-600 hover:to-green-700"
         >
-          Restart and Try Better Planning
+          Restart from Beginning
         </button>
       </motion.div>
     </motion.div>

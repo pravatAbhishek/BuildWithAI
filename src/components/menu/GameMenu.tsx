@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useGameStore } from "@/store/gameStore";
 
 export function GameMenu() {
-  const { startJourney, resetGame, hasPlayed, playerLevel, totalEXP, leaderboard } = useGameStore();
+  const { startJourney, resetGame, playerLevel, totalEXP, leaderboard } = useGameStore();
 
   const ranked = useMemo(
     () => [...leaderboard].sort((a, b) => b.score - a.score).slice(0, 5),
@@ -78,25 +78,14 @@ export function GameMenu() {
               </motion.button>
 
               <motion.button
-                whileHover={hasPlayed ? { scale: 1.02, y: -2 } : {}}
-                whileTap={hasPlayed ? { scale: 0.98 } : {}}
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={resetGame}
-                disabled={!hasPlayed}
-                className={`rounded-2xl px-5 py-4 text-lg font-black shadow-xl ${
-                  hasPlayed
-                    ? "bg-gradient-to-r from-rose-500 to-red-600 text-white"
-                    : "cursor-not-allowed bg-slate-200 text-slate-500"
-                }`}
+                className="rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 px-5 py-4 text-lg font-black text-white shadow-xl"
               >
                 ♻️ Reset Game
               </motion.button>
             </div>
-
-            {!hasPlayed && (
-              <p className="mt-3 text-xs font-semibold text-slate-600">
-                Reset unlocks once you start a run.
-              </p>
-            )}
           </section>
 
           <section className="rounded-[2rem] border border-white/60 bg-white/80 p-5 shadow-2xl backdrop-blur-xl">
