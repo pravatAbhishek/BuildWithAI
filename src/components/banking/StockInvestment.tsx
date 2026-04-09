@@ -15,6 +15,7 @@ import { GAME_CONFIG } from "@/lib/constants";
 import type { StockItem } from "@/types/game";
 
 type PriceDirection = "up" | "down" | "flat";
+const STOCK_INTRO_STORAGE_KEY = "growtopia-stock-intro-seen-v1";
 
 interface StockSnapshot {
   stock: StockItem;
@@ -47,9 +48,9 @@ function getDirection(current: number, previous: number): PriceDirection {
 }
 
 function getDirectionLabel(direction: PriceDirection): string {
-  if (direction === "up") return "Likely Up";
-  if (direction === "down") return "Likely Down";
-  return "Likely Stable";
+  if (direction === "up") return "May Go Up Tomorrow";
+  if (direction === "down") return "May Go Down Tomorrow";
+  return "May Stay Similar Tomorrow";
 }
 
 function getDirectionTone(direction: PriceDirection): string {
@@ -62,6 +63,12 @@ function getDirectionGlyph(direction: PriceDirection): string {
   if (direction === "up") return "▲";
   if (direction === "down") return "▼";
   return "■";
+}
+
+function getDirectionGuide(direction: PriceDirection): string {
+  if (direction === "up") return "News looks positive today. Small buy can be okay.";
+  if (direction === "down") return "News looks weak today. Wait or sell can be safer.";
+  return "News is neutral today. Move slowly with small quantity.";
 }
 
 function buildChartData(stock: StockItem, currentDay: number) {
@@ -94,6 +101,15 @@ export function StockInvestment() {
   const [selectedStockId, setSelectedStockId] = useState<string>(stockItems[0]?.id || "");
   const [quantity, setQuantity] = useState(1);
   const [tradeMessage, setTradeMessage] = useState<string | null>(null);
+  const [showIntro, setShowIntro] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+
+    try {
+      return !window.localStorage.getItem(STOCK_INTRO_STORAGE_KEY);
+    } catch {
+      return true;
+    }
+  });
 
   const marketFeatureUnlocked = isFeatureUnlocked("stock-market");
   const marketUnlocked = marketFeatureUnlocked && stockUnlocked;
@@ -133,6 +149,16 @@ export function StockInvestment() {
   const selectedHolding = stockHoldings.find((holding) => holding.stockId === activeStockId) || null;
   const chartData = selected ? buildChartData(selected.stock, currentDay) : [];
 
+  const closeIntro = () => {
+    setShowIntro(false);
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(STOCK_INTRO_STORAGE_KEY, "1");
+    } catch {
+      // Ignore storage failures and keep the screen usable.
+    }
+  };
+
   const holdingsRows = useMemo(() => {
     return stockHoldings
       .map((holding) => {
@@ -160,9 +186,9 @@ export function StockInvestment() {
   if (!marketFeatureUnlocked) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-        <p className="text-sm font-black text-amber-800">🔒 Stock Investment Locked</p>
+        <p className="text-sm font-black text-amber-800">🔒 Stocks Are Locked</p>
         <p className="mt-1 text-sm text-amber-700">
-          Stock market opens only in the final phase.
+          Stocks open in the final phase so you can learn basics first.
         </p>
         <p className="mt-2 text-xs font-semibold text-amber-700">Current Phase: {currentPhase} / 9</p>
       </div>
@@ -172,9 +198,9 @@ export function StockInvestment() {
   if (!marketUnlocked) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-        <p className="text-sm font-black text-amber-800">🔒 Market Access Pending</p>
+        <p className="text-sm font-black text-amber-800">🔒 Stocks Not Ready Yet</p>
         <p className="mt-1 text-sm text-amber-700">
-          Reach Level {GAME_CONFIG.STOCK_UNLOCK_LEVEL} to trade stocks in final phase.
+          Reach Level {GAME_CONFIG.STOCK_UNLOCK_LEVEL} to start stock trading in final phase.
         </p>
       </div>
     );
@@ -183,10 +209,13 @@ export function StockInvestment() {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-sky-200 bg-gradient-to-r from-sky-50 via-cyan-50 to-blue-50 p-4">
-        <p className="text-xs font-black uppercase tracking-[0.15em] text-sky-700">Stock Investment Desk</p>
+        <p className="text-xs font-black uppercase tracking-[0.15em] text-sky-700">Simple Stock Desk</p>
         <p className="mt-1 text-sm text-sky-800">
-          4 hardcoded stocks run on deterministic daily loops with fixed news sentiment.
+          Read news, buy small, and sell later for gain. Start with 1-3 shares.
         </p>
+        <div className="mt-2 rounded-xl border border-sky-200 bg-white/70 p-2 text-xs text-sky-900">
+          Quick steps: 1) Pick a stock. 2) Read today&apos;s news + tomorrow hint. 3) Buy or sell.
+        </div>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -254,6 +283,14 @@ export function StockInvestment() {
                 <p className="text-2xl font-black text-sky-700">₹{selected.currentPrice}</p>
               </div>
 
+              <div
+                className={`mt-2 rounded-xl border px-3 py-2 text-xs font-semibold ${getDirectionTone(
+                  selected.projectedDirection,
+                )}`}
+              >
+                {getDirectionGuide(selected.projectedDirection)}
+              </div>
+
               <div className="mt-3 h-36 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData}>
@@ -272,23 +309,24 @@ export function StockInvestment() {
               </div>
 
               <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                <p className="font-bold text-slate-800">Today&apos;s News</p>
+                <p className="font-bold text-slate-800">Today&apos;s News (Simple)</p>
                 <p className="mt-1">{selected.todayNews}</p>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-amber-50 p-3">
-                  <p className="text-xs font-bold text-amber-700">Wallet</p>
+                  <p className="text-xs font-bold text-amber-700">Money in Wallet</p>
                   <p className="text-lg font-black text-amber-800">₹{player.wallet}</p>
                 </div>
                 <div className="rounded-xl bg-emerald-50 p-3">
-                  <p className="text-xs font-bold text-emerald-700">You Hold</p>
+                  <p className="text-xs font-bold text-emerald-700">Your Shares</p>
                   <p className="text-lg font-black text-emerald-800">{selectedHolding?.quantity || 0} shares</p>
                 </div>
               </div>
 
               <div className="mt-3 rounded-xl border border-slate-200 p-3">
-                <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-600">Trade Quantity</p>
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-600">How Many Shares?</p>
+                <p className="mt-1 text-xs text-slate-600">1 share means one small unit of this stock.</p>
                 <div className="mt-2 flex gap-2">
                   {[1, 3, 5, 10].map((q) => (
                     <button
@@ -318,26 +356,26 @@ export function StockInvestment() {
                       const success = buyStock(selected.stock.id, quantity);
                       setTradeMessage(
                         success
-                          ? `Bought ${quantity} ${selected.stock.symbol} @ ₹${selected.currentPrice}`
-                          : "Buy failed. Check wallet and unlock status.",
+                          ? `Nice! You bought ${quantity} ${selected.stock.symbol} shares at ₹${selected.currentPrice}.`
+                          : "Not enough wallet money for this buy.",
                       );
                     }}
                     className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-black text-white hover:bg-emerald-700"
                   >
-                    Buy (₹{selected.currentPrice * quantity})
+                    Buy Now (₹{selected.currentPrice * quantity})
                   </button>
                   <button
                     onClick={() => {
                       const success = sellStock(selected.stock.id, quantity);
                       setTradeMessage(
                         success
-                          ? `Sold ${quantity} ${selected.stock.symbol} @ ₹${selected.currentPrice}`
-                          : "Sell failed. Not enough shares.",
+                          ? `Good job! You sold ${quantity} ${selected.stock.symbol} shares at ₹${selected.currentPrice}.`
+                          : "You do not have enough shares to sell.",
                       );
                     }}
                     className="rounded-xl bg-rose-600 px-3 py-2 text-sm font-black text-white hover:bg-rose-700"
                   >
-                    Sell (₹{selected.currentPrice * quantity})
+                    Sell Now (₹{selected.currentPrice * quantity})
                   </button>
                 </div>
 
@@ -351,9 +389,9 @@ export function StockInvestment() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-600">Stock Inventory</p>
+        <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-600">Your Stock Bag</p>
         {holdingsRows.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-600">No stocks in portfolio yet. Buy from the trading panel.</p>
+          <p className="mt-2 text-sm text-slate-600">No stocks yet. Start with small quantity from the panel above.</p>
         ) : (
           <div className="mt-3 space-y-2">
             {holdingsRows.map((row) => (
@@ -371,16 +409,51 @@ export function StockInvestment() {
                   </p>
                 </div>
                 <p className="mt-1 text-xs text-slate-600">
-                  Qty: {row.quantity} | Avg Buy: ₹{row.averageBuyPrice.toFixed(2)} | CMP: ₹{row.currentPrice}
+                  Shares: {row.quantity} | Your buy average: ₹{row.averageBuyPrice.toFixed(2)} | Today price: ₹{row.currentPrice}
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
-                  Invested: ₹{Math.round(row.invested)} | Value: ₹{Math.round(row.marketValue)}
+                  Money put in: ₹{Math.round(row.invested)} | Worth now: ₹{Math.round(row.marketValue)}
                 </p>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {showIntro && (
+        <motion.div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div
+            className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"
+            initial={{ y: 16, scale: 0.96, opacity: 0 }}
+            animate={{ y: 0, scale: 1, opacity: 1 }}
+          >
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-sky-600">First Time in Stocks</p>
+            <h3 className="mt-1 text-xl font-black text-slate-900">Welcome! Keep It Very Simple</h3>
+
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <p>1) Pick one stock.</p>
+              <p className="mt-1">2) Read news and tomorrow hint.</p>
+              <p className="mt-1">3) Buy small (1-3 shares), then sell later if price goes above your buy average.</p>
+            </div>
+
+            <p className="mt-3 text-xs text-slate-600">
+              Tip: Do not spend all your wallet in one stock.
+            </p>
+
+            <button
+              onClick={closeIntro}
+              className="mt-4 w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-black text-white hover:bg-sky-700"
+            >
+              Got it, let&apos;s start
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 }
