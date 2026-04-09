@@ -710,8 +710,6 @@ export const useGameStore = create<GameState & GameActions>()(
           ),
         });
 
-        syncProgression();
-
         setTimeout(() => set({ showWaterEffect: false, showCoinEffect: false }), 1200);
       },
 
@@ -831,8 +829,6 @@ export const useGameStore = create<GameState & GameActions>()(
             state.ownedAssets,
           ),
         });
-
-        syncProgression();
       },
 
       withdrawFromSavings: (amount: number) => {
@@ -958,8 +954,6 @@ export const useGameStore = create<GameState & GameActions>()(
             state.ownedAssets,
           ),
         });
-
-        syncProgression();
       },
 
       withdrawFixedDeposit: (fdId: string) => {
@@ -1015,8 +1009,6 @@ export const useGameStore = create<GameState & GameActions>()(
             state.ownedAssets,
           ),
         });
-
-        syncProgression();
       },
 
       cancelSIP: (sipId: string) => {
@@ -1069,8 +1061,6 @@ export const useGameStore = create<GameState & GameActions>()(
             state.ownedAssets,
           ),
         });
-
-        syncProgression();
       },
 
       investMoney: (amount: number) => {
@@ -1096,8 +1086,6 @@ export const useGameStore = create<GameState & GameActions>()(
             state.ownedAssets,
           ),
         });
-
-        syncProgression();
       },
 
       buyAsset: (assetId: string) => {
@@ -1127,8 +1115,6 @@ export const useGameStore = create<GameState & GameActions>()(
             nextAssets,
           ),
         });
-
-        syncProgression();
       },
 
       sellAsset: (assetId: string) => {
@@ -1481,8 +1467,6 @@ export const useGameStore = create<GameState & GameActions>()(
           ].slice(-12),
           ...getGameOverPatch(state, nextWallet, nextSavings, nextFDs, nextSips, nextAssets),
         });
-
-        syncProgression();
       },
 
       applyInvestmentPreview: (days: number | null) => {

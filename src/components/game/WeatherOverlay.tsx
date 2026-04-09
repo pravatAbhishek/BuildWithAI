@@ -109,31 +109,19 @@ export const WeatherOverlay = ({ suppressUi = false }: WeatherOverlayProps) => {
                     <p className="text-sm uppercase tracking-[0.15em] text-slate-500">
                       Active Event
                     </p>
-                    <h4 className="text-xl font-bold text-slate-900">
-                      {currentWeather === "rain" && "Rain Day"}
-                      {currentWeather === "drought" && "Drought Day"}
-                    </h4>
+                    <h4 className="text-xl font-bold text-slate-900">Drought Day</h4>
                   </div>
                 </div>
 
                 <p className="text-sm text-slate-600 leading-relaxed">
-                  {currentWeather === "rain" &&
-                    "Rain has no earning change today. Keep steady habits."}
-                  {currentWeather === "drought" &&
-                    "Drought is a challenge day. Earnings are reduced by 60%, but all investments remain open."}
+                  Drought is a challenge day. Earnings are reduced by 60%, but all investments remain open.
                 </p>
                 <p className="text-sm font-bold text-slate-800">{weatherImpactText}</p>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  {currentWeather === "drought" ? (
-                    <div className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
-                      Drought cannot be cleared with money
-                    </div>
-                  ) : (
-                    <div className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
-                      Rain is neutral today
-                    </div>
-                  )}
+                  <div className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+                    Drought cannot be cleared with money
+                  </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                     Wallet: ₹{player.wallet}
                   </div>
