@@ -94,7 +94,7 @@ export const WeatherOverlay = ({ suppressUi = false }: WeatherOverlayProps) => {
       </AnimatePresence>
 
       <AnimatePresence>
-        {!suppressUi && currentWeather !== "none" && currentWeather !== "storm" && (
+        {!suppressUi && currentWeather === "drought" && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

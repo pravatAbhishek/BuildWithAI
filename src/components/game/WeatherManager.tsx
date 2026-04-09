@@ -29,7 +29,14 @@ export const WeatherManager = () => {
     if (triggeredDayRef.current === player.currentDay) return;
 
     triggeredDayRef.current = player.currentDay;
-    const cycleIndex = (player.currentDay - 1) % 3;
+    // Reduce weather event frequency by 50%: even days are clear weather.
+    if (player.currentDay % 2 === 0) {
+      triggerWeatherEvent("none");
+      return;
+    }
+
+    const weatherDayIndex = Math.floor((player.currentDay - 1) / 2);
+    const cycleIndex = weatherDayIndex % 3;
     const weather = cycleIndex === 0 ? "rain" : cycleIndex === 1 ? "storm" : "drought";
     triggerWeatherEvent(weather);
   }, [player.currentDay, triggerWeatherEvent]);
